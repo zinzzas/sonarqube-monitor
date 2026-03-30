@@ -1,0 +1,39 @@
+{
+  "version": 2,
+  "defaultProfile": "vue_src_tree",
+  "defaults": {
+    "splitAfterModuleRows": ["auth", "core", "portal", "unknown"],
+    "chartModuleMaxDepth": 3,
+    "moduleTreeDefaultExpandDepth": 4
+  },
+  "profiles": {
+    "java_fims": {
+      "label": "Java — /fims/{module} (단일 레벨)",
+      "strategy": "split_after",
+      "after": "/fims/",
+      "segment_index": 0
+    },
+    "java_hihr_tree": {
+      "label": "Java — anchor 이후 경로 트리 (롤업)",
+      "strategy": "path_tree",
+      "stripPrefixes": ["src/main/java/"],
+      "anchorAfter": "com/hhi/hihr/",
+      "chartStackAnchorAfter": "",
+      "maxDepth": 7
+    },
+    "vue_src_tree": {
+      "label": "Vue — src/ 이후 경로 트리 (롤업, L1은 집계 결과에서만)",
+      "strategy": "path_tree",
+      "stripPrefixes": ["src/"],
+      "anchorAfter": "",
+      "chartStackAnchorAfter": "",
+      "maxDepth": 7
+    }
+  },
+  "projectProfiles": {
+    "api-server": "java_hihr_tree",
+    "hihr": "vue_src_tree",
+    "hrcs": "vue_src_tree",
+    "coc": "vue_src_tree"
+  }
+}

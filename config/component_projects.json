@@ -1,0 +1,6 @@
+[
+  { "id": "hihr", "label": "HIHR", "componentKey": "2320-all" },
+  { "id": "hrcs", "label": "HRCS", "componentKey": "" },
+  { "id": "coc", "label": "COC", "componentKey": "" },
+  { "id": "api-server", "label": "API SERVER", "componentKey": "" }
+]
