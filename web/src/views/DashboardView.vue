@@ -18,6 +18,7 @@ import {
   getModuleTreeDefaultExpandDepth,
   getProfileForProject,
 } from "../config/moduleGrouping.js";
+import { LOAD_MORE_CHEVRON_SRC } from "../loadingOverlay.js";
 import { buildDefaultExpandedModulePathSet, visibleModuleTreeRows } from "../moduleTree.js";
 import { SEVERITY_OPTIONS } from "../severity.js";
 
@@ -37,6 +38,12 @@ const SEV_COLORS = {
   MEDIUM: "#ca8a04",
   LOW: "#16a34a",
   INFO: "#64748b",
+};
+
+/** 차트 축·범례 — CSS `--dashboard-chart-*` 톤과 맞춤 */
+const CHART_CHROME = {
+  axis: "#64748b",
+  grid: "rgba(5, 150, 105, 0.11)",
 };
 
 function moduleTotal(modCounts) {
@@ -201,7 +208,21 @@ const pieOptions = {
   responsive: true,
   maintainAspectRatio: false,
   plugins: {
-    legend: { position: "bottom" },
+    legend: {
+      position: "bottom",
+      labels: {
+        color: CHART_CHROME.axis,
+        padding: 14,
+        usePointStyle: true,
+      },
+    },
+    tooltip: {
+      bodyColor: "#334155",
+      titleColor: "#334155",
+      borderColor: "rgba(16, 185, 129, 0.25)",
+      borderWidth: 1,
+      backgroundColor: "rgba(255, 255, 255, 0.96)",
+    },
   },
 };
 
@@ -224,16 +245,42 @@ const stackedBarOptions = {
   scales: {
     x: {
       stacked: true,
+      grid: {
+        color: CHART_CHROME.grid,
+        drawTicks: true,
+      },
+      border: { color: "rgba(16, 185, 129, 0.2)" },
       ticks: {
         maxRotation: 48,
         minRotation: 0,
         autoSkip: true,
+        color: CHART_CHROME.axis,
       },
     },
-    y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } },
+    y: {
+      stacked: true,
+      beginAtZero: true,
+      grid: { color: CHART_CHROME.grid },
+      border: { color: "rgba(16, 185, 129, 0.2)" },
+      ticks: { precision: 0, color: CHART_CHROME.axis },
+    },
   },
   plugins: {
-    legend: { position: "bottom" },
+    legend: {
+      position: "bottom",
+      labels: {
+        color: CHART_CHROME.axis,
+        padding: 12,
+        usePointStyle: true,
+      },
+    },
+    tooltip: {
+      bodyColor: "#334155",
+      titleColor: "#334155",
+      borderColor: "rgba(16, 185, 129, 0.25)",
+      borderWidth: 1,
+      backgroundColor: "rgba(255, 255, 255, 0.96)",
+    },
   },
 };
 
@@ -424,7 +471,12 @@ function downloadModuleCsv() {
         </p>
       </div>
       <div class="dashboard__toolbar-right">
-        <button class="btn" type="button" :disabled="loading" @click="load">
+        <button
+          class="btn btn--dashboard-refresh"
+          type="button"
+          :disabled="loading"
+          @click="load"
+        >
           {{ loading ? "불러오는 중…" : "새로고침" }}
         </button>
       </div>
@@ -693,5 +745,29 @@ function downloadModuleCsv() {
       집계할 프로젝트가 없습니다. <code>config/component_projects.json</code>에
       <code>componentKey</code>를 설정하세요.
     </p>
+
+    <Teleport to="body">
+      <Transition name="load-more-fade">
+        <div
+          v-if="loading"
+          class="load-more-overlay"
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <div class="load-more-overlay__content">
+            <div class="load-more-overlay__logo">
+              <img
+                class="load-more-overlay__img"
+                :src="LOAD_MORE_CHEVRON_SRC"
+                alt=""
+                decoding="async"
+                fetchpriority="low"
+              />
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>

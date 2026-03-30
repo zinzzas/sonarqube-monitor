@@ -4,6 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useComponentProjectSelect } from "../composables/useComponentProjectSelect.js";
 import { useSonarIssuesPaging } from "../composables/useSonarIssuesPaging.js";
 import { issueMatchesModuleFilter } from "../module.js";
+import { LOAD_MORE_CHEVRON_SRC } from "../loadingOverlay.js";
 import {
   SEVERITY_OPTIONS,
   STATUS_OPTIONS,
@@ -161,8 +162,6 @@ const filterHint = computed(() => {
   return parts.length ? parts.join(" · ") : "";
 });
 
-const loadMoreChevronSrc = `${import.meta.env.BASE_URL}load-more-chevron.png`;
-
 function goDashboard() {
   router.push({ name: "dashboard" });
 }
@@ -206,7 +205,7 @@ function onProjectSelectChange() {
 
     <header class="hero">
       <p class="hero__eyebrow">Issue monitoring</p>
-      <h1>프로젝트별 이슈</h1>
+      <h1>프로젝트별 이슈 상세 목록</h1>
       <p class="hero__sub">
         대시보드에서 숫자를 눌러 들어온 경우, 아래에 모듈·Severity 필터가 반영됩니다. 표는 스크롤 시
         다음 페이지가 이어 붙습니다.
@@ -215,88 +214,109 @@ function onProjectSelectChange() {
 
     <p v-if="filterHint" class="route-filter-hint">{{ filterHint }} (목록은 component 기준으로 추가 필터)</p>
 
-    <section class="card card--filters" aria-label="검색 필터">
+    <div class="issue-list__query-toolbar">
+      <button
+        class="btn btn--dashboard-refresh issue-list__query-btn"
+        type="button"
+        :disabled="loading"
+        @click="loadFirst"
+      >
+        {{ loading ? "조회 중…" : "조회" }}
+      </button>
+    </div>
+
+    <section class="card card--filters issue-list-filters" aria-label="검색 필터">
       <div class="card__head">
         <h2 class="card__title">Filters</h2>
       </div>
 
-      <div class="filter-group">
-        <span class="filter-title filter-title--wide">프로젝트</span>
-        <label class="field project-field">
-          <span>대상 프로젝트</span>
-            <select v-model="selectedProjectId" class="select" @change="onProjectSelectChange">
+      <div class="filter-grid-row filter-grid-row--project-target">
+        <span class="filter-title filter-title--target">대상 프로젝트</span>
+        <div class="filter-grid-row__stack filter-grid-row__stack--project">
+          <select
+            v-model="selectedProjectId"
+            class="select filter-inline-select filter-inline-select--project"
+            @change="onProjectSelectChange"
+          >
             <option value="">프로젝트 선택</option>
             <option v-for="p in projectOptions" :key="p.id" :value="p.id">
               {{ p.label }}
             </option>
           </select>
-          <span v-if="selectedProjectKeyUnset" class="field-hint">
+          <p v-if="selectedProjectKeyUnset" class="field-hint filter-grid-row__hint">
             이 프로젝트의 componentKey 는 아직 비어 있습니다.
             <code>config/component_projects.json</code>에서 키를 넣어 주세요.
-          </span>
-        </label>
+          </p>
+        </div>
       </div>
 
-      <div class="filter-group">
-        <span class="filter-title">목록</span>
-        <label class="field narrow">
-          <span>pageSize</span>
-          <input v-model.number="pageSize" type="number" min="1" max="500" />
-        </label>
-        <label class="field sort-field">
-          <span>정렬</span>
-          <select v-model="sortBySeverity" class="select">
+      <div class="filter-grid-row filter-grid-row--sort-only">
+        <span class="filter-title">정렬</span>
+        <div class="filter-grid-row__main filter-grid-row__main--sort-only">
+          <select v-model="sortBySeverity" class="select filter-inline-select filter-inline-select--sort">
             <option v-for="opt in severitySortOptions" :key="opt.value || 'default'" :value="opt.value">
               {{ opt.label }}
             </option>
           </select>
-        </label>
-      </div>
-
-      <div class="filter-group">
-        <span class="filter-title">Severity</span>
-        <div class="chip-group">
-          <label
-            v-for="s in SEVERITY_OPTIONS"
-            :key="s"
-            class="chk-chip"
-            :class="'chk-chip--' + s.toLowerCase()"
-          >
-            <input v-model="filterSeverities" type="checkbox" :value="s" />
-            <span class="chk-chip__face">{{ s }}</span>
-          </label>
         </div>
       </div>
 
-      <div class="filter-group">
+      <div class="filter-grid-row">
+        <span class="filter-title">Severity</span>
+        <div class="filter-grid-row__main">
+          <div class="chip-group">
+            <label
+              v-for="s in SEVERITY_OPTIONS"
+              :key="s"
+              class="chk-chip"
+              :class="'chk-chip--' + s.toLowerCase()"
+            >
+              <input v-model="filterSeverities" type="checkbox" :value="s" />
+              <span class="chk-chip__face">{{ s }}</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="filter-grid-row">
         <span class="filter-title">Status</span>
-        <div class="chip-group">
-          <label v-for="st in STATUS_OPTIONS" :key="st" class="chk-chip">
-            <input v-model="filterStatuses" type="checkbox" :value="st" />
-            <span class="chk-chip__face">{{ st }}</span>
-          </label>
+        <div class="filter-grid-row__main">
+          <div class="chip-group">
+            <label v-for="st in STATUS_OPTIONS" :key="st" class="chk-chip">
+              <input v-model="filterStatuses" type="checkbox" :value="st" />
+              <span class="chk-chip__face">{{ st }}</span>
+            </label>
+          </div>
         </div>
       </div>
     </section>
 
-    <div class="toolbar">
-      <button class="btn" type="button" :disabled="loading" @click="loadFirst">
-        {{ loading ? "조회 중…" : "조회" }}
-      </button>
-    </div>
-
     <div v-if="error" class="err" role="alert">{{ error }}</div>
 
-    <div v-if="hasData && (issues.length || total != null)" class="stats">
-      <span class="stat-pill">
-        <span class="stat-dot" :class="{ 'stat-dot--idle': total == null }" aria-hidden="true" />
-        {{ totalLabel }}
-      </span>
-      <span v-if="displayedIssues.length" class="stat-pill stat-pill--muted">
-        표시 {{ displayedIssues.length.toLocaleString("ko-KR") }}건
-        <template v-if="moduleFilter"> (필터 후)</template>
-      </span>
-      <span v-if="loadStateLabel" class="stat-pill stat-pill--muted">{{ loadStateLabel }}</span>
+    <div class="issue-list__stats-row">
+      <div class="issue-list__stats-row__left">
+        <div v-if="hasData && (issues.length || total != null)" class="stats issue-list__stats">
+          <span class="stat-pill">
+            <span class="stat-dot" :class="{ 'stat-dot--idle': total == null }" aria-hidden="true" />
+            {{ totalLabel }}
+          </span>
+          <span v-if="displayedIssues.length" class="stat-pill stat-pill--muted">
+            표시 {{ displayedIssues.length.toLocaleString("ko-KR") }}건
+            <template v-if="moduleFilter"> (필터 후)</template>
+          </span>
+          <span v-if="loadStateLabel" class="stat-pill stat-pill--muted">{{ loadStateLabel }}</span>
+        </div>
+      </div>
+      <div class="issue-list__pagesize-inline">
+        <span class="filter-inline-label">pageSize</span>
+        <input
+          v-model.number="pageSize"
+          class="filter-inline-input filter-inline-input--pagesize"
+          type="number"
+          min="1"
+          max="500"
+        />
+      </div>
     </div>
 
     <div class="table-panel">
@@ -314,10 +334,7 @@ function onProjectSelectChange() {
           </tr>
         </thead>
         <tbody>
-          <tr v-if="loading && !issues.length">
-            <td colspan="8" class="empty">불러오는 중…</td>
-          </tr>
-          <tr v-else-if="hasData && !displayedIssues.length">
+          <tr v-if="hasData && !displayedIssues.length">
             <td colspan="8" class="empty">
               프로젝트를 선택하고 조회하거나, 조건·모듈 필터에 맞는 이슈가 없습니다.
             </td>
@@ -358,7 +375,7 @@ function onProjectSelectChange() {
     <Teleport to="body">
       <Transition name="load-more-fade">
         <div
-          v-if="loadingMore"
+          v-if="loading || loadingMore"
           class="load-more-overlay"
           role="status"
           aria-live="polite"
@@ -368,7 +385,7 @@ function onProjectSelectChange() {
             <div class="load-more-overlay__logo">
               <img
                 class="load-more-overlay__img"
-                :src="loadMoreChevronSrc"
+                :src="LOAD_MORE_CHEVRON_SRC"
                 alt=""
                 decoding="async"
                 fetchpriority="low"

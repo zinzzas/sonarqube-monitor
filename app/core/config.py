@@ -16,8 +16,8 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    sonar_base_url: str = "https://sonarqube.devops.cj.net"
-    """SONAR_BASE_URL — 스킴(https://)과 호스트 필수. 비우면 룰셋 기본 도메인 사용."""
+    sonar_base_url: str = ""
+    """SONAR_BASE_URL — 프로젝트 루트 `.env`에만 정의. 스킴(https://)과 호스트 필수."""
     sonar_token: str = ""
     """User token. Basic: username=token, password empty. Bearer: set sonar_auth=bearer."""
     sonar_auth: Literal["basic", "bearer"] = "basic"
@@ -37,23 +37,22 @@ class Settings(BaseSettings):
     @field_validator("sonar_base_url", mode="before")
     @classmethod
     def normalize_sonar_base_url(cls, v: object) -> str:
-        default = "https://sonarqube.devops.cj.net"
-        if v is None:
-            return default
+        if v is None or (isinstance(v, str) and not v.strip()):
+            raise ValueError(
+                "SONAR_BASE_URL이 비어 있습니다. 프로젝트 루트 `.env`에 설정하세요. (`.env.example` 참고)"
+            )
         if not isinstance(v, str):
-            return default
+            raise ValueError("SONAR_BASE_URL은 문자열이어야 합니다.")
         s = v.strip().rstrip("/")
-        if not s:
-            return default
         low = s.lower()
         if not low.startswith(("http://", "https://")):
             raise ValueError(
-                "SONAR_BASE_URL must start with http:// or https:// (호스트 도메인 누락 방지)"
+                "SONAR_BASE_URL은 http:// 또는 https:// 로 시작해야 합니다 (호스트 도메인 누락 방지)."
             )
         parsed = urlparse(s)
         if not parsed.netloc:
             raise ValueError(
-                "SONAR_BASE_URL must include a host, e.g. https://sonarqube.devops.cj.net"
+                "SONAR_BASE_URL에 호스트가 필요합니다. 예: https://sonarqube.example.com"
             )
         return s
 

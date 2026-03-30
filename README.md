@@ -4,7 +4,7 @@ SonarQube 이슈를 대시보드(프로젝트·모듈·Severity)와 상세 목�
 
 ## 빠른 시작
 
-1. **`.env`** (프로젝트 루트): `SONAR_BASE_URL`, `SONAR_TOKEN` 필수.
+1. **`.env`** (프로젝트 루트): `cp .env.example .env` 후 `SONAR_BASE_URL`, `SONAR_TOKEN` 필수. Sonar 호스트는 **`.env`에만** 두고 코드에는 넣지 않습니다.
 2. **백엔드** (포트 `9999`):
 
    ```bash
