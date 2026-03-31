@@ -32,6 +32,12 @@ const payload = ref(null);
 /** 마지막으로 집계 API를 성공적으로 받은 시각 (새로고침마다 갱신) */
 const lastFetchedAt = ref(null);
 
+/** path_tree 표 펼침 — load()보다 먼저 선언 (TDZ 회피) */
+const expandedModulePaths = ref(new Set());
+
+/** `/api/metrics/dashboard`는 Sonar 전량 이슈 집계로 수분 걸릴 수 있음. 무한 로딩 방지용. */
+const DASHBOARD_FETCH_TIMEOUT_MS = 120_000;
+
 const SEV_COLORS = {
   BLOCKER: "#b91c1c",
   HIGH: "#ea580c",
@@ -54,8 +60,15 @@ function moduleTotal(modCounts) {
 async function load() {
   loading.value = true;
   err.value = "";
+  const controller = new AbortController();
+  let timeoutId = 0;
   try {
-    const res = await fetch("/api/metrics/dashboard");
+    timeoutId = window.setTimeout(() => controller.abort(), DASHBOARD_FETCH_TIMEOUT_MS);
+    const res = await fetch("/api/metrics/dashboard", { signal: controller.signal });
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = 0;
+    }
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       const d = data.detail ?? data.message;
@@ -67,12 +80,24 @@ async function load() {
     payload.value = data;
     lastFetchedAt.value = new Date();
     await nextTick();
-    expandedModulePaths.value = buildDefaultExpandedFromMergedRows();
+    try {
+      expandedModulePaths.value = buildDefaultExpandedFromMergedRows();
+    } catch (expandErr) {
+      console.error(expandErr);
+      expandedModulePaths.value = new Set();
+    }
   } catch (e) {
-    err.value = String(e?.message || e);
+    const name = e?.name ?? "";
+    if (name === "AbortError") {
+      err.value =
+        `집계 요청이 ${DASHBOARD_FETCH_TIMEOUT_MS / 1000}초 안에 끝나지 않았습니다. SonarQube·VPN·네트워크를 확인하거나 잠시 후 새로고침하세요.`;
+    } else {
+      err.value = String(e?.message || e);
+    }
     payload.value = null;
     expandedModulePaths.value = new Set();
   } finally {
+    if (timeoutId) clearTimeout(timeoutId);
     loading.value = false;
   }
 }
@@ -184,9 +209,6 @@ const stackChartSubtitle = computed(
 
 /** 트리 표 안내용 (defaults.moduleTreeDefaultExpandDepth) */
 const moduleTreeDefaultExpandLabel = computed(() => getModuleTreeDefaultExpandDepth());
-
-/** path_tree 표 펼침 (projectId::path) */
-const expandedModulePaths = ref(new Set());
 
 const pieChartData = computed(() => {
   const st = severityForScope.value;
