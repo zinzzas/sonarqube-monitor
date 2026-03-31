@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     True 이면 요청에 `statuses`만 있을 때 동일 값을 `issueStatuses` 로 한 번 더 붙여 전달한다.
     """
 
+    metrics_project_cache_ttl_seconds: float = 120.0
+    """대시보드 집계 시 프로젝트별 Sonar 이슈 결과 캐시 TTL(초)."""
+    metrics_dashboard_cache_ttl_seconds: float = 90.0
+    """조합된 `/api/metrics/dashboard` 전체 응답 캐시 TTL(초)."""
+    metrics_sonar_max_concurrent: int = 4
+    """프로젝트별 `fetch_all_issues` 동시 실행 상한(Sonar 부하 완화)."""
+
     @field_validator("sonar_base_url", mode="before")
     @classmethod
     def normalize_sonar_base_url(cls, v: object) -> str:
