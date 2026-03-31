@@ -1,4 +1,8 @@
-"""프로젝트 목록 — `config/component_projects.json` 단일 출처."""
+"""프로젝트 목록 — `config/component_projects.json` 단일 출처.
+
+각 행: id, label, componentKey(Sonar), 선택 필드 stack(java|vue) — 운영자가 스택 구분용으로만 사용.
+모듈 집계 규칙은 `config/module_grouping.json` 의 projectProfiles[id] 가 단일 출처다.
+"""
 from __future__ import annotations
 
 import json

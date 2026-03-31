@@ -9,6 +9,19 @@ def _norm_slash(s: str) -> str:
     return s.replace("\\", "/").strip()
 
 
+def sonar_relative_path(component: str | None) -> str:
+    """
+    Sonar 이슈 `component`는 보통 `projectKey:relative/path` 형태다.
+    접두를 제거하지 않으면 stripPrefixes·anchorAfter 매칭이 실패해 모듈이 전부 unknown 이 될 수 있다.
+    """
+    path = _norm_slash(str(component or ""))
+    if not path:
+        return ""
+    if ":" in path:
+        path = path.split(":", 1)[1].lstrip("/")
+    return path
+
+
 def _looks_like_file(seg: str) -> bool:
     if not seg or "." not in seg:
         return False
@@ -23,7 +36,7 @@ def path_tree_cumulative_keys(component: str | None, profile: dict[str, Any]) ->
     이슈가 기여하는 경로 노드 키 (롤업).
     예: atm/annualmonthlyleaveplanaccrual → ["atm", "atm/annualmonthlyleaveplanaccrual"]
     """
-    path = _norm_slash(str(component or ""))
+    path = sonar_relative_path(component)
     if not path:
         return []
 
@@ -79,7 +92,7 @@ def chart_stack_bucket(component: str | None, profile: dict[str, Any]) -> str:
     스택 막대용: strip 후 chartStackAnchorAfter(없으면 anchorAfter) 다음의 첫 경로 세그먼트만.
     split_after 는 module_extract.chart_stack_bucket 에서 처리.
     """
-    path = _norm_slash(str(component or ""))
+    path = sonar_relative_path(component)
     if not path:
         return "unknown"
 

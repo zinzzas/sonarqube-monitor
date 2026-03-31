@@ -6,13 +6,14 @@ from app.core.module_path_tree import (
     chart_stack_bucket as _chart_stack_bucket_path,
     path_tree_cumulative_keys,
     path_tree_leaf_key,
+    sonar_relative_path,
 )
 
 
 def _profile_for_project(project_id: str | None) -> dict:
     cfg = load_module_grouping()
     profiles = cfg.get("profiles") or {}
-    default_id = str(cfg.get("defaultProfile") or "java_fims")
+    default_id = str(cfg.get("defaultProfile") or "vue_src_tree")
     pmap = cfg.get("projectProfiles") or {}
     if project_id and str(project_id) in pmap:
         pid = str(pmap[str(project_id)])
@@ -23,7 +24,7 @@ def _profile_for_project(project_id: str | None) -> dict:
 
 def profile_id_for_project(project_id: str | None) -> str:
     cfg = load_module_grouping()
-    default_id = str(cfg.get("defaultProfile") or "java_fims")
+    default_id = str(cfg.get("defaultProfile") or "vue_src_tree")
     pmap = cfg.get("projectProfiles") or {}
     if project_id and str(project_id) in pmap:
         return str(pmap[str(project_id)])
@@ -36,7 +37,7 @@ def module_strategy_for_project(project_id: str | None) -> str:
 
 
 def extract_module(component: str | None, project_id: str | None = None) -> str:
-    path = str(component or "").strip()
+    path = sonar_relative_path(component)
     if not path:
         return "unknown"
 

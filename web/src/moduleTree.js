@@ -1,8 +1,10 @@
 import { modulePathDepth } from "./config/moduleGrouping.js";
 
 /**
- * 집계 키 기준으로 기본 펼침: `visibleDepthLevels` 단계(행)까지 보이도록 깊이가 그보다 얕은 노드는 모두 펼침.
- * 예: 4 → 깊이 1,2,3 경로는 expanded(→ 4단계 행까지 노출).
+ * 집계 키 기준으로 기본 펼침: 모듈 경로 `modulePathDepth`(슬래시 구간 수) 기준.
+ * `visibleDepthLevels = N` 이면 `1 <= depth < N` 인 키만 expanded → 최대 N단계 경로까지 행 노출.
+ * 예: N=3 → depth 1,2 만 expanded(atm, atm/foo) → atm/foo/bar(depth 3) 행까지 보임.
+ * 예: N=4 → depth 1,2,3 expanded → 네 번째 세그먼트 행까지 노출.
  * @param {string} projectId
  * @param {Record<string, unknown>} modMap
  * @param {number} visibleDepthLevels

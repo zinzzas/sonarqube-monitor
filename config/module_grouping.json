@@ -4,25 +4,25 @@
   "defaults": {
     "splitAfterModuleRows": ["auth", "core", "portal", "unknown"],
     "chartModuleMaxDepth": 3,
-    "moduleTreeDefaultExpandDepth": 4
+    "moduleTreeDefaultExpandDepth": 3
   },
   "profiles": {
     "java_fims": {
-      "label": "Java — /fims/{module} (단일 레벨)",
+      "label": "Java — /fims/{module} (단일 레벨, 레거시)",
       "strategy": "split_after",
       "after": "/fims/",
       "segment_index": 0
     },
     "java_hihr_tree": {
-      "label": "Java — anchor 이후 경로 트리 (롤업)",
+      "label": "Java — com/hhi/hihr/ 패키지 이후 경로 트리 (롤업)",
       "strategy": "path_tree",
-      "stripPrefixes": ["src/main/java/"],
-      "anchorAfter": "com/hhi/hihr/",
+      "stripPrefixes": ["src/main/java/", "src/main/java"],
+      "anchorAfter": "/fims/",
       "chartStackAnchorAfter": "",
-      "maxDepth": 7
+      "maxDepth": 5
     },
     "vue_src_tree": {
-      "label": "Vue — src/ 이후 경로 트리 (롤업, L1은 집계 결과에서만)",
+      "label": "Vue — src/ 이후 경로 트리 (롤업)",
       "strategy": "path_tree",
       "stripPrefixes": ["src/"],
       "anchorAfter": "",

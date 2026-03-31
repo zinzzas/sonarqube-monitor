@@ -66,7 +66,7 @@ export function getChartModuleMaxDepth() {
   return Math.min(20, Math.floor(d));
 }
 
-/** Module×Severity 트리 기본 펼침: 깊이 1..N 행까지 보이도록 깊이 < N 인 노드 펼침 (기본 4) */
+/** `defaults.moduleTreeDefaultExpandDepth` — N이면 경로 깊이 1..N 행까지 보이도록 depth<N 노드 펼침. 설정 없으면 4 */
 export function getModuleTreeDefaultExpandDepth() {
   const d = Number(mg.defaults?.moduleTreeDefaultExpandDepth ?? 4);
   if (!Number.isFinite(d) || d < 1) return 4;

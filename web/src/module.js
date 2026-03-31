@@ -6,6 +6,14 @@ function norm(s) {
     .trim();
 }
 
+/** Sonar `component` 는 `projectKey:relative/path` — 백엔드 sonar_relative_path 와 동일 */
+function sonarRelativePath(component) {
+  let path = norm(component);
+  const i = path.indexOf(":");
+  if (i >= 0) path = path.slice(i + 1).replace(/^\//, "");
+  return path;
+}
+
 function profileForProject(projectId) {
   const defaultId = mg.defaultProfile ?? "vue_src_tree";
   const key =
@@ -25,7 +33,7 @@ function looksLikeFile(seg) {
  * path_tree: 누적 경로 키 목록 (백엔드 path_tree_cumulative_keys 와 동일 규칙)
  */
 export function pathTreeCumulativeKeys(component, profile) {
-  const path = norm(component);
+  const path = sonarRelativePath(component);
   if (!path) return [];
 
   let raw = profile.stripPrefixes ?? ["src/"];
@@ -72,7 +80,7 @@ export function pathTreeCumulativeKeys(component, profile) {
 }
 
 function splitAfterModule(component, profile) {
-  const path = String(component || "").trim();
+  const path = sonarRelativePath(component);
   if (!path) return "unknown";
   const after = profile.after ?? "/fims/";
   const segIdx = Number(profile.segment_index ?? 0);
