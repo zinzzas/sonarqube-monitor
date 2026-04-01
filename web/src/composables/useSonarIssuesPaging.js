@@ -62,6 +62,26 @@ async function fetchIssues(qs) {
   return data;
 }
 
+/** Sonar `issues/search`: total은 paging에만 있을 수 있음. issues는 배열이 아닌 dict로 오는 경우도 보정 */
+function extractIssuesList(data) {
+  if (!data || typeof data !== "object") return [];
+  const raw = data.issues ?? data.Issues;
+  if (Array.isArray(raw)) return raw;
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    return Object.values(raw);
+  }
+  if (Array.isArray(data.results)) return data.results;
+  return [];
+}
+
+function extractTotal(data) {
+  if (!data || typeof data !== "object") return null;
+  if (typeof data.total === "number") return data.total;
+  const p = data.paging;
+  if (p && typeof p === "object" && typeof p.total === "number") return p.total;
+  return null;
+}
+
 export function useSonarIssuesPaging(refs) {
   const {
     pageSize,
@@ -110,6 +130,17 @@ export function useSonarIssuesPaging(refs) {
   }
 
   async function loadFirst() {
+    const ck = String(componentKeys.value ?? "").trim();
+    if (!ck) {
+      loading.value = false;
+      error.value =
+        "Sonar componentKey가 없습니다. config/component_projects.json에 해당 프로젝트의 componentKey를 설정하세요. (키가 비면 API가 잘못된 프로젝트를 조회할 수 있습니다.)";
+      items.value = [];
+      total.value = null;
+      hasMore.value = false;
+      return;
+    }
+
     loading.value = true;
     loadingMore.value = false;
     error.value = null;
@@ -125,14 +156,17 @@ export function useSonarIssuesPaging(refs) {
       ps,
     });
 
+    let needFollowUpPages = false;
+
     try {
       const data = await fetchIssues(q);
-      total.value = typeof data.total === "number" ? data.total : null;
-      const list = data.issues ?? [];
+      total.value = extractTotal(data);
+      const list = extractIssuesList(data);
       const n = pageSize.value;
 
       if (list.length === 0) {
-        hasMore.value = false;
+        hasMore.value = total.value != null && total.value > 0;
+        needFollowUpPages = hasMore.value;
         return;
       }
 
@@ -151,10 +185,26 @@ export function useSonarIssuesPaging(refs) {
     } finally {
       loading.value = false;
     }
+
+    // total>0인데 첫 페이지 issues가 비면 loadMore는 기본적으로 loading 때문에 막혔을 수 있음.
+    // 빈 테이블에서는 센티널이 뷰에 안 들어와 무한스크롤이 안 도는 경우도 있어 후속 페이지를 당긴다.
+    if (needFollowUpPages && items.value.length === 0) {
+      const maxExtra = 5;
+      for (let i = 0; i < maxExtra && items.value.length === 0 && hasMore.value; i++) {
+        await loadMore({ allowDuringInitialLoad: true });
+      }
+    }
   }
 
-  async function loadMore() {
-    if (!hasMore.value || loading.value || loadingMore.value) {
+  async function loadMore(options = {}) {
+    const allowDuringInitialLoad = Boolean(options.allowDuringInitialLoad);
+    if (!String(componentKeys.value ?? "").trim()) {
+      return;
+    }
+    if (!hasMore.value || loadingMore.value) {
+      return;
+    }
+    if (!allowDuringInitialLoad && loading.value) {
       return;
     }
     loadingMore.value = true;
@@ -168,10 +218,11 @@ export function useSonarIssuesPaging(refs) {
 
     try {
       const data = await fetchIssues(q);
-      if (typeof data.total === "number") {
-        total.value = data.total;
+      const t = extractTotal(data);
+      if (t != null) {
+        total.value = t;
       }
-      let batch = data.issues ?? [];
+      let batch = extractIssuesList(data);
       if (overflowIssue.value) {
         batch = [overflowIssue.value, ...batch];
         overflowIssue.value = null;

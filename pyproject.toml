@@ -17,3 +17,9 @@ dependencies = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
+
+[tool.hatch.envs.default.scripts]
+# 프로젝트 루트에서: hatch run start
+start = "python main.py"
+# 리로드 없이 고정 실행
+serve = "uvicorn main:app --host 127.0.0.1 --port 9999"

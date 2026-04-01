@@ -1,5 +1,25 @@
 import mg from "../../config/module_grouping.json";
 
+/**
+ * Sonar `issues/search` 한 건에서 파일·모듈 키 문자열 추출.
+ * 일부 버전/응답에서 `component`가 `{ key }` 객체이거나, 경로가 다른 필드에만 있을 수 있다.
+ */
+export function issueComponentKey(row) {
+  if (row == null) return "";
+  const c = row.component;
+  if (typeof c === "string" && c.trim()) return c.trim();
+  if (c != null && typeof c === "object") {
+    if (typeof c.key === "string" && c.key.trim()) return c.key.trim();
+  }
+  if (typeof row.componentKey === "string" && row.componentKey.trim()) return row.componentKey.trim();
+  if (typeof row.mainComponent === "string" && row.mainComponent.trim()) return row.mainComponent.trim();
+  if (row.mainComponent != null && typeof row.mainComponent === "object") {
+    const k = row.mainComponent.key;
+    if (typeof k === "string" && k.trim()) return k.trim();
+  }
+  return "";
+}
+
 function norm(s) {
   return String(s || "")
     .replace(/\\/g, "/")
@@ -54,11 +74,11 @@ export function pathTreeCumulativeKeys(component, profile) {
 
   const anchor = norm(profile.anchorAfter ?? "");
   if (anchor) {
-    const rl = rest.toLowerCase();
-    const al = anchor.toLowerCase();
-    const idx = rl.indexOf(al);
-    if (idx < 0) return ["unknown"];
-    rest = rest.slice(idx + anchor.length).replace(/^\//, "");
+    const escaped = anchor.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(escaped, "i");
+    const m = re.exec(rest);
+    if (!m) return ["unknown"];
+    rest = rest.slice(m.index + m[0].length).replace(/^\//, "");
   }
 
   let parts = rest.split("/").filter(Boolean);
@@ -111,19 +131,42 @@ export function extractModuleFromComponent(component, projectId) {
   return "unknown";
 }
 
+/** 누적 키가 어긋질 때: 상대 경로에 모듈 세그먼트가 경로로 등장하는지 (대시보드 키와 완화 매칭) */
+function looseModulePathMatch(rel, f) {
+  const r = norm(rel).replace(/\\/g, "/");
+  const ft = norm(f).replace(/\\/g, "/");
+  if (!r || !ft) return false;
+  if (r === ft) return true;
+  const rl = r.toLowerCase();
+  const fl = ft.toLowerCase();
+  if (rl === fl) return true;
+  if (rl.startsWith(`${fl}/`)) return true;
+  if (rl.endsWith(`/${fl}`)) return true;
+  if (rl.includes(`/${fl}/`)) return true;
+  return false;
+}
+
 /**
- * 이슈 목록 필터: path_tree 는 prefix 일치(하위 경로 포함).
+ * 이슈 목록 필터: path_tree 는 대시보드 집계와 동일하게 누적 경로 키 우선.
+ * 키가 unknown 이거나 규칙 불일치 시 상대 경로 완화 매칭.
+ * @param {string|object} componentOrRow — component 문자열 또는 Sonar issue 행 객체
  */
-export function issueMatchesModuleFilter(component, projectId, filter) {
+export function issueMatchesModuleFilter(componentOrRow, projectId, filter) {
   if (filter == null || filter === "") return true;
   const f = String(filter).trim();
   if (!f) return true;
+  const component =
+    typeof componentOrRow === "object" && componentOrRow !== null
+      ? issueComponentKey(componentOrRow)
+      : String(componentOrRow ?? "");
+  if (!component) return false;
+
   const profile = profileForProject(projectId);
   const strategy = profile?.strategy ?? "split_after";
   if (strategy === "path_tree") {
-    const leaf = extractModuleFromComponent(component, projectId);
-    if (leaf === f) return true;
-    return leaf.startsWith(`${f}/`);
+    const keys = pathTreeCumulativeKeys(component, profile);
+    if (keys.some((k) => k === f || k.startsWith(`${f}/`))) return true;
+    return looseModulePathMatch(sonarRelativePath(component), f);
   }
   return extractModuleFromComponent(component, projectId) === f;
 }

@@ -1,8 +1,55 @@
+from typing import Any
+
 from fastapi import APIRouter, Request
 
 from app.services.sonar_api import collect_issues_search_params, proxy_issues_search
 
 router = APIRouter(tags=["issues"])
+
+
+def _enrich_issue_component_strings(issues: list[Any]) -> None:
+    """일부 Sonar 응답은 `component` 대신 `mainComponent.key`·`componentKey`만 준다."""
+    for issue in issues:
+        if not isinstance(issue, dict) or issue.get("component"):
+            continue
+        main = issue.get("mainComponent")
+        if isinstance(main, dict):
+            mk = main.get("key")
+            if isinstance(mk, str) and mk.strip():
+                issue["component"] = mk.strip()
+                continue
+        ck = issue.get("componentKey")
+        if isinstance(ck, str) and ck.strip():
+            issue["component"] = ck.strip()
+
+
+def _coerce_issues_list(raw: Any) -> list[Any]:
+    """Sonar는 보통 issues 배열을 주지만, 일부 응답·직렬화에서 dict 등으로 올 수 있다."""
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        return raw
+    if isinstance(raw, dict):
+        return list(raw.values())
+    return []
+
+
+def _normalize_sonar_issues_search(data: dict[str, Any]) -> dict[str, Any]:
+    """
+    SonarQube 버전에 따라 `total`이 최상위가 아니라 `paging.total`에만 오는 경우가 많다.
+    프론트가 `data.total`·`data.issues`만 보도록 맞춘다.
+    """
+    out = dict(data)
+    paging = out.get("paging")
+    if isinstance(paging, dict) and "total" not in out and isinstance(paging.get("total"), int):
+        out["total"] = paging["total"]
+    raw_issues = out.get("issues")
+    if raw_issues is None and isinstance(out.get("Issues"), list):
+        raw_issues = out.get("Issues")
+    out["issues"] = _coerce_issues_list(raw_issues)
+    if isinstance(out["issues"], list):
+        _enrich_issue_component_strings(out["issues"])
+    return out
 
 
 @router.get("/issues/search")
@@ -12,4 +59,7 @@ async def issues_search(request: Request) -> dict:
     쿼리스트링 전달; `componentKeys` 없으면 `SONAR_SAMPLE_COMPONENT_KEYS` 사용.
     """
     params = collect_issues_search_params(request)
-    return await proxy_issues_search(params)
+    raw = await proxy_issues_search(params)
+    if isinstance(raw, dict):
+        return _normalize_sonar_issues_search(raw)
+    return raw

@@ -1,9 +1,9 @@
 <script setup>
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useComponentProjectSelect } from "../composables/useComponentProjectSelect.js";
 import { useSonarIssuesPaging } from "../composables/useSonarIssuesPaging.js";
-import { issueMatchesModuleFilter } from "../module.js";
+import { issueComponentKey, issueMatchesModuleFilter } from "../module.js";
 import { LOAD_MORE_CHEVRON_SRC } from "../loadingOverlay.js";
 import {
   SEVERITY_OPTIONS,
@@ -25,6 +25,8 @@ const sortBySeverity = ref("severity_desc");
 const filterSeverities = ref([...SEVERITY_OPTIONS]);
 const filterStatuses = ref([...STATUS_OPTIONS]);
 
+const MODULE_AUTO_FETCH_MAX = 30;
+
 const {
   items: issues,
   total,
@@ -34,6 +36,7 @@ const {
   loadingMore,
   error,
   loadFirst,
+  loadMore,
   sentinelEl,
 } = useSonarIssuesPaging({
   pageSize,
@@ -69,16 +72,14 @@ function authorCell(row) {
 }
 
 function componentLabel(row) {
-  return row.component || "—";
+  return issueComponentKey(row) || "—";
 }
 
-/** Sonar API 이슈의 project, 없으면 component 의 `프로젝트키:경로` 앞부분 */
+/** Sonar API 이슈의 project, 없으면 component 키의 `프로젝트키:경로` 앞부분 */
 function issueProjectKey(row) {
   if (row.project) return String(row.project).trim();
-  const c = row.component;
-  if (typeof c === "string" && c.includes(":")) {
-    return c.split(":")[0].trim();
-  }
+  const path = issueComponentKey(row);
+  if (path.includes(":")) return path.split(":")[0].trim();
   return "";
 }
 
@@ -116,6 +117,13 @@ function formatDate(iso) {
   return d.toLocaleString("ko-KR");
 }
 
+/** v-for key — Sonar 이슈 key 누락·중복 시 행이 한 줄로 합쳐지는 것 방지 */
+function issueRowStableKey(row, idx) {
+  const k = row?.key ?? row?.issueKey ?? row?.uuid;
+  if (k != null && String(k) !== "") return String(k);
+  return `issue-row-${idx}`;
+}
+
 const moduleFilter = computed(() => {
   const m = route.query.module;
   return typeof m === "string" && m ? m : "";
@@ -123,12 +131,64 @@ const moduleFilter = computed(() => {
 
 const activeProjectId = computed(() => selectedProjectId.value || String(route.params.projectId || ""));
 
+/** 모듈 문자열이 있는데 한 건도 매칭되지 않음(프로필/경로 불일치 등) */
+const moduleFilterMatchedNone = computed(() => {
+  const m = moduleFilter.value;
+  if (!m) return false;
+  const raw = issues.value;
+  if (!raw.length) return false;
+  const pid = activeProjectId.value;
+  const n = raw.filter((row) => issueMatchesModuleFilter(row, pid, m)).length;
+  return n === 0;
+});
+
+/** 모듈 필터 적용 후 0건이면 로드된 원본을 그대로 표시(빈 표 방지) */
 const displayedIssues = computed(() => {
   const m = moduleFilter.value;
-  if (!m) return issues.value;
+  const raw = issues.value;
+  if (!m) return raw;
   const pid = activeProjectId.value;
-  return issues.value.filter((row) => issueMatchesModuleFilter(row.component, pid, m));
+  const filtered = raw.filter((row) => issueMatchesModuleFilter(row, pid, m));
+  if (filtered.length > 0) return filtered;
+  return raw;
 });
+
+/** 모듈은 API에 넘기지 않고 클라이언트에서만 걸러서, 앞쪽 페이지에 해당 경로 이슈가 없으면 빈 목록이 됨 → 자동 추가 로드 */
+const moduleAutoFetchCount = ref(0);
+
+function onLoadFirst() {
+  moduleAutoFetchCount.value = 0;
+  loadFirst();
+}
+
+watch([moduleFilter, activeProjectId], () => {
+  moduleAutoFetchCount.value = 0;
+});
+
+watch(
+  () => [
+    issues.value,
+    moduleFilter.value,
+    activeProjectId.value,
+    hasMore.value,
+    loading.value,
+    loadingMore.value,
+  ],
+  async () => {
+    const m = moduleFilter.value;
+    if (!m || loading.value || loadingMore.value) return;
+    const pid = activeProjectId.value;
+    if (!pid) return;
+    if (issues.value.length === 0) return;
+    const filtered = issues.value.filter((row) => issueMatchesModuleFilter(row, pid, m));
+    if (filtered.length > 0) return;
+    if (!hasMore.value) return;
+    if (moduleAutoFetchCount.value >= MODULE_AUTO_FETCH_MAX) return;
+    moduleAutoFetchCount.value += 1;
+    await loadMore();
+  },
+  { flush: "post" },
+);
 
 const totalLabel = computed(() => {
   const t = total.value;
@@ -147,6 +207,9 @@ const selectedProjectKeyUnset = computed(() => {
 
 const loadStateLabel = computed(() => {
   if (loadingMore.value) return "추가 로딩 중";
+  if (moduleFilter.value && !loading.value && issues.value.length && !displayedIssues.value.length && hasMore.value) {
+    return `모듈 경로에 맞는 이슈를 찾기 위해 추가 페이지 로드 중 (${moduleAutoFetchCount.value}/${MODULE_AUTO_FETCH_MAX})`;
+  }
   if (hasMore.value && issues.value.length) return "더 불러올 수 있음";
   if (issues.value.length) return "마지막까지 로드됨";
   return "";
@@ -166,6 +229,22 @@ function goDashboard() {
   router.push({ name: "dashboard" });
 }
 
+/** 모듈 쿼리만 제거하고 동일 프로젝트로 유지 (필터로 행이 0일 때) */
+function clearModuleQuery() {
+  const q = { ...route.query };
+  delete q.module;
+  router.replace({ name: "issues", params: { ...route.params }, query: q });
+}
+
+const showModuleFallbackBanner = computed(
+  () =>
+    Boolean(moduleFilter.value) &&
+    moduleFilterMatchedNone.value &&
+    issues.value.length > 0 &&
+    !loading.value &&
+    !loadingMore.value,
+);
+
 watch(
   () => ({
     pid: route.params.projectId,
@@ -180,6 +259,37 @@ watch(
     } else {
       filterSeverities.value = [...SEVERITY_OPTIONS];
     }
+  },
+  { immediate: true },
+);
+
+/**
+ * Sonar issues/search에 넘기는 조건이 바뀌면 자동 재조회.
+ * (이전에는 projectId·componentKeys만 감시해서 ?severity=만 바뀌면 필터만 갱신되고 목록은 이전 API 결과가 남는 버그가 있었음.)
+ */
+let issuesAutoLoadSeq = 0;
+watch(
+  () => ({
+    name: route.name,
+    projectId: route.params.projectId,
+    ck: String(componentKeys.value || "").trim(),
+    severityQ: String(route.query.severity ?? ""),
+    moduleQ: String(route.query.module ?? ""),
+    sevKey: JSON.stringify([...(filterSeverities.value ?? [])].sort()),
+    stKey: JSON.stringify([...(filterStatuses.value ?? [])].sort()),
+    sort: sortBySeverity.value,
+    ps: pageSize.value,
+  }),
+  () => {
+    if (route.name !== "issues") return;
+    const pid = String(route.params.projectId || "");
+    const ck = String(componentKeys.value || "").trim();
+    if (!pid || !ck) return;
+    const seq = ++issuesAutoLoadSeq;
+    nextTick(() => {
+      if (seq !== issuesAutoLoadSeq) return;
+      onLoadFirst();
+    });
   },
   { immediate: true },
 );
@@ -207,19 +317,32 @@ function onProjectSelectChange() {
       <p class="hero__eyebrow">Issue monitoring</p>
       <h1>프로젝트별 이슈 상세 목록</h1>
       <p class="hero__sub">
-        대시보드에서 숫자를 눌러 들어온 경우, 아래에 모듈·Severity 필터가 반영됩니다. 표는 스크롤 시
-        다음 페이지가 이어 붙습니다.
+        대시보드에서 숫자를 눌러 들어온 경우, 아래에 모듈·Severity 필터가 반영됩니다. Severity·Status·정렬·pageSize를
+        바꾸면 같은 조건으로 자동 재조회합니다. 표는 스크롤 시 다음 페이지가 이어 붙습니다. 모듈 경로 필터는 Sonar API에
+        직접 전달되지 않아, 해당 경로 이슈가
+        뒤쪽 페이지에만 있으면 자동으로 추가 페이지를 불러옵니다(최대
+        {{ MODULE_AUTO_FETCH_MAX }}회).
       </p>
     </header>
 
     <p v-if="filterHint" class="route-filter-hint">{{ filterHint }} (목록은 component 기준으로 추가 필터)</p>
+
+    <p
+      v-if="showModuleFallbackBanner"
+      class="route-filter-hint route-filter-hint--warn"
+      role="status"
+    >
+      모듈 «{{ moduleFilter }}»와 일치하는 행이 없어, <strong>현재 로드된 전체 이슈</strong>를 표시합니다.
+      프로젝트 프로필(<code>module_grouping.json</code>)이 Sonar 경로와 맞는지 확인하거나
+      <button type="button" class="crumb__link" @click="clearModuleQuery">모듈 필터 해제</button>를 누르세요.
+    </p>
 
     <div class="issue-list__query-toolbar">
       <button
         class="btn btn--dashboard-refresh issue-list__query-btn"
         type="button"
         :disabled="loading"
-        @click="loadFirst"
+        @click="onLoadFirst"
       >
         {{ loading ? "조회 중…" : "조회" }}
       </button>
@@ -293,6 +416,10 @@ function onProjectSelectChange() {
 
     <div v-if="error" class="err" role="alert">{{ error }}</div>
 
+    <p v-if="loadingMore" class="route-filter-hint" role="status" aria-live="polite">
+      추가 페이지를 불러오는 중입니다…
+    </p>
+
     <div class="issue-list__stats-row">
       <div class="issue-list__stats-row__left">
         <div v-if="hasData && (issues.length || total != null)" class="stats issue-list__stats">
@@ -336,10 +463,13 @@ function onProjectSelectChange() {
         <tbody>
           <tr v-if="hasData && !displayedIssues.length">
             <td colspan="8" class="empty">
-              프로젝트를 선택하고 조회하거나, 조건·모듈 필터에 맞는 이슈가 없습니다.
+              프로젝트를 선택하고 조회하거나, 조건에 맞는 이슈가 없습니다.
             </td>
           </tr>
-          <tr v-for="row in displayedIssues" :key="row.key || row.issueKey || JSON.stringify(row)">
+          <tr
+            v-for="(row, idx) in displayedIssues"
+            :key="issueRowStableKey(row, idx)"
+          >
             <td>
               <span class="pill" :class="severityClass(row.severity)">
                 {{ displaySeverity(row.severity) }}
@@ -375,7 +505,7 @@ function onProjectSelectChange() {
     <Teleport to="body">
       <Transition name="load-more-fade">
         <div
-          v-if="loading || loadingMore"
+          v-if="loading"
           class="load-more-overlay"
           role="status"
           aria-live="polite"

@@ -67,7 +67,7 @@ def _http_status_error_to_http_exception(e: httpx.HTTPStatusError) -> HTTPExcept
     return HTTPException(status_code=status, detail=detail)
 
 
-async def proxy_issues_search(params: dict[str, str]) -> dict:
+async def proxy_issues_search(params: list[tuple[str, str]]) -> dict:
     """SonarQube issues/search 결과 dict 또는 HTTPException."""
     try:
         return await sonar_client.issues_search(params)
