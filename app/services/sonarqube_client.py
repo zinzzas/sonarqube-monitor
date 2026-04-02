@@ -6,6 +6,7 @@ import httpx
 
 from app.core.config import settings
 from app.core.exceptions import SonarConfigError, SonarParseError
+from app.services.sonar_http_log import log_sonar_outgoing_request
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ class SonarQubeClient:
         self,
         params: Mapping[str, str] | Sequence[tuple[str, str]],
     ) -> dict:
+        log_sonar_outgoing_request(method="GET", path="/api/issues/search", params=params)
         async with self._client() as client:
             r = await client.get("/api/issues/search", params=params)
             if r.is_error:
@@ -62,6 +64,7 @@ class SonarQubeClient:
 
     async def request_status(self, path: str, params: dict[str, Any] | None = None) -> tuple[int, object]:
         """HTTP 코드와 본문(JSON 가능 시 dict)."""
+        log_sonar_outgoing_request(method="GET", path=path, params=params or {})
         async with self._client() as client:
             r = await client.get(path, params=params or {})
             body: object = r.text

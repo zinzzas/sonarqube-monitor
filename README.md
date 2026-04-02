@@ -106,21 +106,22 @@ hatch run python -c "import fastapi; print('ok')"
 
 ### 5. 환경 변수 (`.env`)
 
-프로젝트 **루트**에 `.env`를 둡니다. 예시는 `.env.example`을 복사합니다.
+프로젝트 **루트**에 `.env` 파일을 만들고 값을 넣습니다 (`main.py`와 같은 폴더).
 
 ```powershell
-copy .env.example .env
 notepad .env
 ```
 
-필수에 가깝게 설정할 항목:
+주요 항목:
 
 | 변수 | 설명 |
 |------|------|
 | `SONAR_BASE_URL` | SonarQube 서버 베이스 URL (예: `https://sonarqube.example.com`) |
 | `SONAR_TOKEN` | 분석/이슈 조회용 토큰 |
+| `SONAR_SAMPLE_COMPONENT_KEYS` | (선택) UI에서 `componentKeys` 생략 시 기본 프로젝트 키 |
+| `SONAR_HTTP_LOG_LEVEL` | (선택) 업스트림 Sonar HTTP 로깅: `off` / `info` / `debug` |
 
-Sonar 호스트·토큰은 **코드에 넣지 말고 `.env`만** 수정합니다.
+Sonar 호스트·토큰은 **코드에 넣지 말고 `.env`만** 수정합니다. 그 외 옵션(`SONAR_AUTH`, `SONAR_PROXY` 등)은 `.env` 안 주석을 참고합니다.
 
 ---
 

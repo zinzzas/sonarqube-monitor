@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     SonarQube 10.4+ 에서 `statuses` 필터가 `issueStatuses` 로 이전된 인스턴스용.
     True 이면 요청에 `statuses`만 있을 때 동일 값을 `issueStatuses` 로 한 번 더 붙여 전달한다.
     """
+    sonar_http_log_level: Literal["off", "info", "debug"] = "debug"
+    """
+    업스트림 SonarQube HTTP 호출 로깅.
+    `off`: 미출력. `info`: 메서드·전체 URL 한 줄. `debug`: 쿼리 파라미터·curl 예시 추가.
+    """
 
     metrics_project_cache_ttl_seconds: float = 120.0
     """대시보드 집계 시 프로젝트별 Sonar 이슈 결과 캐시 TTL(초)."""
@@ -46,7 +51,7 @@ class Settings(BaseSettings):
     def normalize_sonar_base_url(cls, v: object) -> str:
         if v is None or (isinstance(v, str) and not v.strip()):
             raise ValueError(
-                "SONAR_BASE_URL이 비어 있습니다. 프로젝트 루트 `.env`에 설정하세요. (`.env.example` 참고)"
+                "SONAR_BASE_URL이 비어 있습니다. 프로젝트 루트 `.env`에 설정하세요."
             )
         if not isinstance(v, str):
             raise ValueError("SONAR_BASE_URL은 문자열이어야 합니다.")
@@ -91,6 +96,22 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return v.strip()
         return v
+
+    @field_validator("sonar_http_log_level", mode="before")
+    @classmethod
+    def normalize_sonar_http_log_level(cls, v: object) -> str:
+        if v is None or v == "":
+            return "off"
+        if not isinstance(v, str):
+            return "off"
+        s = v.strip().lower()
+        if s in ("off", "none", "0", "false", "no"):
+            return "off"
+        if s in ("info", "information"):
+            return "info"
+        if s in ("debug", "verbose", "full"):
+            return "debug"
+        return "off"
 
 
 settings = Settings()
