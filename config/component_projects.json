@@ -1,25 +1,25 @@
 [
   {
     "id": "api-server",
-    "label": "HIHR API (Java)",
+    "label": "API (Java)",
     "componentKey": "2320-all",
     "stack": "java"
   },
   {
-    "id": "hihr",
-    "label": "HIHR Web (Vue)",
+    "id": "h1",
+    "label": "h1 Web (Vue)",
     "componentKey": "2319-all",
     "stack": "vue"
   },
   {
-    "id": "hrcs",
-    "label": "HRCS Web (Vue)",
+    "id": "h2",
+    "label": "h2 Web (Vue)",
     "componentKey": "",
     "stack": "vue"
   },
   {
-    "id": "coc",
-    "label": "COC Web (Vue)",
+    "id": "c1",
+    "label": "c1 Web (Vue)",
     "componentKey": "",
     "stack": "vue"
   }

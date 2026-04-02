@@ -8,11 +8,11 @@ import {
   LinearScale,
   Tooltip,
 } from "chart.js";
-import { computed, nextTick, onMounted, ref, watch } from "vue";
-import { useRouter } from "vue-router";
+import { computed, nextTick, ref, watch } from "vue";
 import { Bar, Pie } from "vue-chartjs";
-import { DASHBOARD_HERO } from "../config/dashboardConfig.js";
+import { useRouter } from "vue-router";
 import { COMPONENT_PROJECTS } from "../config/componentProjects.js";
+import { DASHBOARD_HERO } from "../config/dashboardConfig.js";
 import {
   getDefaultModuleRowsForProject,
   getModuleTreeDefaultExpandDepth,
@@ -27,6 +27,8 @@ ChartJS.register(ArcElement, BarElement, CategoryScale, LinearScale, Tooltip, Le
 const router = useRouter();
 
 const loading = ref(true);
+/** Module×Severity — 이슈 펼침 CSV 생성 중 */
+const exportingModuleCsv = ref(false);
 const err = ref("");
 const payload = ref(null);
 /** 마지막으로 집계 API를 성공적으로 받은 시각 (새로고침마다 갱신) */
@@ -35,8 +37,8 @@ const lastFetchedAt = ref(null);
 /** path_tree 표 펼침 — load()보다 먼저 선언 (TDZ 회피) */
 const expandedModulePaths = ref(new Set());
 
-/** `/api/metrics/dashboard`는 Sonar 전량 이슈 집계로 수분 걸릴 수 있음. 무한 로딩 방지용. */
-const DASHBOARD_FETCH_TIMEOUT_MS = 120_000;
+/** `/api/metrics/dashboard`는 프로젝트당 Sonar 순차 호출·이슈 페이징으로 수분 걸릴 수 있음. */
+const DASHBOARD_FETCH_TIMEOUT_MS = 600_000;
 
 const SEV_COLORS = {
   BLOCKER: "#b91c1c",
@@ -52,6 +54,10 @@ const CHART_CHROME = {
   grid: "rgba(5, 150, 105, 0.11)",
 };
 
+const firstProjectId = COMPONENT_PROJECTS[0]?.id ?? "";
+/** 상단 차트·표 범위 — 기본 첫 프로젝트, 콤보 변경 시 해당 projectId로만 집계 API 호출 */
+const scopeId = ref(firstProjectId);
+
 function moduleTotal(modCounts) {
   if (!modCounts) return 0;
   return SEVERITY_OPTIONS.reduce((a, s) => a + (modCounts[s] ?? 0), 0);
@@ -64,7 +70,13 @@ async function load() {
   let timeoutId = 0;
   try {
     timeoutId = window.setTimeout(() => controller.abort(), DASHBOARD_FETCH_TIMEOUT_MS);
-    const res = await fetch("/api/metrics/dashboard", { signal: controller.signal });
+    const qs = new URLSearchParams();
+    if (scopeId.value) qs.set("projectId", scopeId.value);
+    const dashUrl =
+      qs.toString().length > 0
+        ? `/api/metrics/dashboard?${qs}`
+        : "/api/metrics/dashboard";
+    const res = await fetch(dashUrl, { signal: controller.signal });
     if (timeoutId) {
       clearTimeout(timeoutId);
       timeoutId = 0;
@@ -102,8 +114,6 @@ async function load() {
   }
 }
 
-onMounted(load);
-
 const snapshotAsOfIso = computed(() =>
   lastFetchedAt.value ? lastFetchedAt.value.toISOString() : "",
 );
@@ -119,8 +129,6 @@ const snapshotAsOfLabel = computed(() => {
 
 const summary = computed(() => payload.value?.summary ?? null);
 const byProject = computed(() => payload.value?.byProject ?? []);
-const globalModules = computed(() => payload.value?.globalModules ?? {});
-const globalChartStackModules = computed(() => payload.value?.globalChartStackModules ?? {});
 const metricErrors = computed(() => payload.value?.errors ?? []);
 
 function emptySevRow() {
@@ -133,7 +141,8 @@ const mergedProjectRows = computed(() => {
   return COMPONENT_PROJECTS.map((p) => {
     const row = list.find((b) => b.projectId === p.id);
     if (row) {
-      return { ...row };
+      // 표시 라벨은 항상 `component_projects.json`(번들) 기준 — API/백엔드 캐시에 남은 옛 label과 어긋나지 않게 함
+      return { ...row, label: p.label };
     }
     return {
       projectId: p.id,
@@ -148,49 +157,57 @@ const mergedProjectRows = computed(() => {
   });
 });
 
-/** 'global' | 프로젝트 id — 상단 차트·요약 KPI 범위 */
-const scopeId = ref("global");
+const activeProjectRow = computed(
+  () => mergedProjectRows.value.find((r) => r.projectId === scopeId.value) ?? null,
+);
 
-watch(mergedProjectRows, (rows) => {
-  if (scopeId.value !== "global" && !rows.some((r) => r.projectId === scopeId.value)) {
-    scopeId.value = "global";
-  }
-});
-
-const activeProjectRow = computed(() => {
-  if (scopeId.value === "global") return null;
-  return mergedProjectRows.value.find((r) => r.projectId === scopeId.value) ?? null;
-});
-
-/** KPI·차트에 쓰는 요약 (범위가 전체이면 summary, 아니면 해당 프로젝트) */
+/** KPI·차트 — 선택 프로젝트 행(집계 API는 해당 프로젝트만 반환) */
 const displaySummary = computed(() => {
-  if (scopeId.value === "global") return summary.value;
   const row = activeProjectRow.value;
-  if (!row) return summary.value;
-  return {
-    totalIssues: row.totalIssues ?? 0,
-    highRisk: row.highRisk ?? 0,
-    severityTotal: row.severityTotal ?? emptySevRow(),
-  };
+  if (row && row.projectId === scopeId.value) {
+    return {
+      totalIssues: row.totalIssues ?? 0,
+      highRisk: row.highRisk ?? 0,
+      severityTotal: row.severityTotal ?? emptySevRow(),
+    };
+  }
+  return (
+    summary.value ?? {
+      totalIssues: 0,
+      highRisk: 0,
+      severityTotal: emptySevRow(),
+    }
+  );
 });
 
-const scopeLabel = computed(() => {
-  if (scopeId.value === "global") return "전체 프로젝트 합산";
-  return activeProjectRow.value?.label ?? scopeId.value;
-});
+const scopeLabel = computed(() => activeProjectRow.value?.label ?? scopeId.value);
 
 const severityForScope = computed(() => displaySummary.value?.severityTotal ?? null);
 
-const moduleMapForScope = computed(() => {
-  if (scopeId.value === "global") return globalModules.value;
-  return activeProjectRow.value?.modules ?? {};
+/** 스택 막대: API chartStackModules (anchor 이후 첫 세그먼트만 집계) */
+const chartStackMapForScope = computed(
+  () => activeProjectRow.value?.chartStackModules ?? {},
+);
+
+/** 표·CSV — 현재 선택 프로젝트만 (다른 프로젝트는 콤보 선택 후 조회) */
+const visibleProjectRows = computed(() =>
+  mergedProjectRows.value.filter((r) => r.projectId === scopeId.value),
+);
+
+watch(mergedProjectRows, (rows) => {
+  if (!rows.length || !scopeId.value) return;
+  if (!rows.some((r) => r.projectId === scopeId.value)) {
+    scopeId.value = COMPONENT_PROJECTS[0]?.id ?? rows[0].projectId;
+  }
 });
 
-/** 스택 막대: API chartStackModules (anchor 이후 첫 세그먼트만 집계) */
-const chartStackMapForScope = computed(() => {
-  if (scopeId.value === "global") return globalChartStackModules.value;
-  return activeProjectRow.value?.chartStackModules ?? {};
-});
+watch(
+  scopeId,
+  () => {
+    load();
+  },
+  { immediate: true },
+);
 
 const chartStackLabels = computed(() => {
   const m = chartStackMapForScope.value;
@@ -310,6 +327,8 @@ function goIssues(projectId, query = {}) {
   const q = {};
   if (query.module) q.module = query.module;
   if (query.severity) q.severity = query.severity;
+  /** 이슈 목록에서 출처 구분(문서·필터 힌트용). API에는 전달하지 않음 */
+  q.nav = query.module ? "module-matrix" : "severity-excel";
   router.push({ name: "issues", params: { projectId }, query: q });
 }
 
@@ -354,13 +373,10 @@ function isPathTreeProject(proj) {
 function buildDefaultExpandedFromMergedRows() {
   const depth = getModuleTreeDefaultExpandDepth();
   const next = new Set();
-  for (const row of mergedProjectRows.value) {
-    if (!isPathTreeProject(row)) continue;
-    const s = buildDefaultExpandedModulePathSet(row.projectId, row.modules || {}, depth);
-    for (const x of s) {
-      next.add(x);
-    }
-  }
+  const row = mergedProjectRows.value.find((r) => r.projectId === scopeId.value);
+  if (!row || !isPathTreeProject(row)) return next;
+  const s = buildDefaultExpandedModulePathSet(row.projectId, row.modules || {}, depth);
+  for (const x of s) next.add(x);
   return next;
 }
 
@@ -386,16 +402,6 @@ function moduleSegmentLabel(path) {
   return parts[parts.length - 1] || path;
 }
 
-function modulePathsSortedForCsv(modMap) {
-  const keys = Object.keys(modMap || {});
-  return keys.sort((a, b) => {
-    const da = a.split("/").length;
-    const db = b.split("/").length;
-    if (da !== db) return da - db;
-    return a.localeCompare(b);
-  });
-}
-
 function csvEscape(v) {
   const t = String(v ?? "");
   if (/[",\n\r]/.test(t)) {
@@ -417,7 +423,7 @@ function triggerCsvDownload(lines, filenamePrefix) {
 }
 
 function downloadSeverityCsv() {
-  const rows = mergedProjectRows.value;
+  const rows = visibleProjectRows.value;
   const lines = [];
   lines.push("프로젝트별 Severity (엑셀형)");
   lines.push(["프로젝트", ...SEVERITY_OPTIONS, "TOTAL", "High risk"].map(csvEscape).join(","));
@@ -436,43 +442,68 @@ function downloadSeverityCsv() {
   triggerCsvDownload(lines, "sonarqube-severity");
 }
 
-function downloadModuleCsv() {
-  const rows = mergedProjectRows.value;
-  const lines = [];
-  lines.push("프로젝트별 Module × Severity");
-  for (const proj of rows) {
-    lines.push(`${proj.label} — Module × Severity`);
-    lines.push(["Module", ...SEVERITY_OPTIONS, "TOTAL"].map(csvEscape).join(","));
-    const m = proj.modules || {};
-    if (isPathTreeProject(proj)) {
-      for (const path of modulePathsSortedForCsv(m)) {
-        const counts = m[path] || {};
-        lines.push(
-          [
-            path,
-            ...SEVERITY_OPTIONS.map((s) => counts[s] ?? 0),
-            moduleTotal(counts),
-          ]
-            .map(csvEscape)
-            .join(","),
-        );
-      }
-    } else {
-      for (const mRow of moduleRowsFor(proj)) {
-        lines.push(
-          [
-            mRow.name,
-            ...SEVERITY_OPTIONS.map((s) => mRow.counts[s] ?? 0),
-            moduleTotal(mRow.counts),
-          ]
-            .map(csvEscape)
-            .join(","),
-        );
+async function downloadModuleCsv() {
+  if (exportingModuleCsv.value) return;
+  exportingModuleCsv.value = true;
+  try {
+    const res = await fetch("/api/metrics/export/issues");
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const d = data.detail ?? data.message;
+      window.alert(
+        typeof d === "string" ? d : `이슈 내보내기 실패 (${res.status})`,
+      );
+      return;
+    }
+    const issues = data.issues ?? [];
+    const lines = [];
+    lines.push("프로젝트별 Module × Severity — 이슈 펼침 (OPEN, 대시보드 집계와 동일 소스)");
+    lines.push(
+      [
+        "프로젝트",
+        "Module",
+        "Severity",
+        "Component",
+        "Line",
+        "Rule",
+        "Message",
+        "Status",
+        "Issue key",
+      ]
+        .map(csvEscape)
+        .join(","),
+    );
+    for (const r of issues) {
+      const lineVal = r.line != null && r.line !== "" ? r.line : "";
+      lines.push(
+        [
+          r.projectLabel,
+          r.moduleBucket,
+          r.severity,
+          r.component,
+          lineVal,
+          r.rule,
+          r.message,
+          r.status,
+          r.key,
+        ]
+          .map(csvEscape)
+          .join(","),
+      );
+    }
+    if (data.errors?.length) {
+      lines.push("");
+      lines.push("# 일부 프로젝트는 캐시에 이슈 원본이 없어 누락됐을 수 있음");
+      for (const e of data.errors) {
+        lines.push(csvEscape(`${e.projectId}: ${e.message}`));
       }
     }
-    lines.push("");
+    triggerCsvDownload(lines, "sonarqube-module-issues");
+  } catch (e) {
+    window.alert(String(e?.message || e));
+  } finally {
+    exportingModuleCsv.value = false;
   }
-  triggerCsvDownload(lines, "sonarqube-module");
 }
 </script>
 
@@ -515,7 +546,7 @@ function downloadModuleCsv() {
     <template v-if="!loading && displaySummary && !err">
       <section class="dash-summary" aria-label="요약">
         <div class="kpi">
-          <span class="kpi__label">{{ scopeId === "global" ? "전체 이슈" : "프로젝트 이슈" }}</span>
+          <span class="kpi__label">프로젝트 이슈</span>
           <span class="kpi__value">{{ displaySummary.totalIssues.toLocaleString("ko-KR") }}</span>
         </div>
         <div class="kpi kpi--risk">
@@ -534,10 +565,9 @@ function downloadModuleCsv() {
 
       <div class="dashboard-scope" role="group" aria-label="차트 범위">
         <label class="field dashboard-scope__field">
-          <span class="dashboard-scope__label">차트·요약 범위</span>
+          <span class="dashboard-scope__label">프로젝트 (선택 시 집계)</span>
           <select v-model="scopeId" class="select dashboard-scope__select">
-            <option value="global">전체 프로젝트 합산</option>
-            <option v-for="p in mergedProjectRows" :key="p.projectId" :value="p.projectId">
+            <option v-for="p in COMPONENT_PROJECTS" :key="p.id" :value="p.id">
               {{ p.label }}
             </option>
           </select>
@@ -571,9 +601,9 @@ function downloadModuleCsv() {
         </div>
       </div>
 
-      <section class="card excel-block excel-block--severity dash-chart-last" aria-label="프로젝트별 집계">
+      <section class="card excel-block excel-block--severity dash-chart-last" aria-label="선택 프로젝트 집계">
         <div class="card__head card__head--actions">
-          <h2 class="card__title">프로젝트별 Severity (엑셀형)</h2>
+          <h2 class="card__title">선택 프로젝트 Severity (엑셀형)</h2>
           <button
             type="button"
             class="btn btn--secondary btn--head"
@@ -600,7 +630,7 @@ function downloadModuleCsv() {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="row in mergedProjectRows" :key="row.projectId">
+              <tr v-for="row in visibleProjectRows" :key="row.projectId">
                 <td class="excel__name">{{ row.label }}</td>
                 <td
                   v-for="s in SEVERITY_OPTIONS"
@@ -634,20 +664,20 @@ function downloadModuleCsv() {
         </div>
       </section>
 
-      <section class="card excel-block excel-block--modules" aria-label="프로젝트별 Module × Severity">
+      <section class="card excel-block excel-block--modules" aria-label="선택 프로젝트 Module × Severity">
         <div class="card__head card__head--actions">
-          <h2 class="card__title">프로젝트별 Module × Severity</h2>
+          <h2 class="card__title">선택 프로젝트 Module × Severity</h2>
           <button
             type="button"
             class="btn btn--secondary btn--head"
-            :disabled="loading || !displaySummary"
+            :disabled="loading || !displaySummary || exportingModuleCsv"
             @click="downloadModuleCsv"
           >
-            엑셀 다운로드 (CSV)
+            {{ exportingModuleCsv ? "준비 중…" : "이슈 펼침 CSV" }}
           </button>
         </div>
         <div
-          v-for="proj in mergedProjectRows"
+          v-for="proj in visibleProjectRows"
           :key="proj.projectId + '-mod'"
           class="module-block"
         >

@@ -7,60 +7,9 @@
  *
  * hasMore: total 이 있으면 loaded < total, 없으면 (첫 응답 len > pageSize) 또는 이후 배치 len === pageSize
  */
-import { computed, nextTick, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onUnmounted, ref, unref, watch } from "vue";
 
-function buildSearchParams({
-  pageSize,
-  componentKeys,
-  filterSeverities,
-  filterStatuses,
-  sortBySeverity,
-  severitiesToApiParam,
-  pageIndex,
-  ps,
-}) {
-  const q = new URLSearchParams();
-  if (componentKeys.trim()) {
-    q.set("componentKeys", componentKeys.trim());
-  }
-  q.set("p", String(pageIndex));
-  q.set("ps", String(ps));
-  const sev = severitiesToApiParam(filterSeverities);
-  if (sev) {
-    q.set("severities", sev);
-  }
-  if (filterStatuses.length) {
-    q.set("statuses", filterStatuses.join(","));
-  }
-  const sort = sortBySeverity;
-  if (sort === "severity_desc") {
-    q.set("s", "SEVERITY");
-    q.set("asc", "false");
-  } else if (sort === "severity_asc") {
-    q.set("s", "SEVERITY");
-    q.set("asc", "true");
-  } else if (sort === "creation_desc") {
-    q.set("s", "CREATION_DATE");
-    q.set("asc", "false");
-  } else if (sort === "creation_asc") {
-    q.set("s", "CREATION_DATE");
-    q.set("asc", "true");
-  }
-  return q;
-}
-
-async function fetchIssues(qs) {
-  const url = `/api/issues/search?${qs.toString()}`;
-  const res = await fetch(url);
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const d = data.detail ?? data.message;
-    const msg =
-      typeof d === "string" ? d : d != null ? JSON.stringify(d, null, 2) : res.statusText;
-    throw new Error(msg);
-  }
-  return data;
-}
+import { buildSonarIssuesSearchParams } from "../lib/sonarIssuesSearchParams.js";
 
 /** Sonar `issues/search`: total은 paging에만 있을 수 있음. issues는 배열이 아닌 dict로 오는 경우도 보정 */
 function extractIssuesList(data) {
@@ -82,6 +31,36 @@ function extractTotal(data) {
   return null;
 }
 
+/** 디버깅: 조회마다 총건수·이번 페이지 이슈 개수만 출력 (민감정보 제외) */
+function logIssuesSearchResponse(phase, qs, data) {
+  const t = extractTotal(data);
+  const n = extractIssuesList(data).length;
+  const p = qs.get("p") ?? "?";
+  const ps = qs.get("ps") ?? "?";
+  const ck = (qs.get("componentKeys") || "").trim();
+  const ckShort = ck.length > 40 ? `${ck.slice(0, 40)}…` : ck || "(none)";
+  // eslint-disable-next-line no-console
+  console.info(
+    `[issues/search] ${phase} p=${p} ps=${ps} key=${ckShort} total=${t ?? "null"} issuesLen=${n}`,
+  );
+}
+
+async function fetchIssues(qs, phase = "fetch") {
+  const url = `/api/issues/search?${qs.toString()}`;
+  const res = await fetch(url);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    // eslint-disable-next-line no-console
+    console.error(`[issues/search] ${phase} HTTP ${res.status}`, data);
+    const d = data.detail ?? data.message;
+    const msg =
+      typeof d === "string" ? d : d != null ? JSON.stringify(d, null, 2) : res.statusText;
+    throw new Error(msg);
+  }
+  logIssuesSearchResponse(phase, qs, data);
+  return data;
+}
+
 export function useSonarIssuesPaging(refs) {
   const {
     pageSize,
@@ -91,6 +70,21 @@ export function useSonarIssuesPaging(refs) {
     sortBySeverity,
     severitiesToApiParam,
   } = refs;
+
+  /** Ref | ComputedRef | 값 혼용 시에도 안전 */
+  function resolveComponentKey() {
+    return String(unref(componentKeys) ?? "").trim();
+  }
+
+  function commonArgs() {
+    return {
+      componentKeys: resolveComponentKey(),
+      filterSeverities: unref(filterSeverities),
+      filterStatuses: unref(filterStatuses),
+      sortBySeverity: unref(sortBySeverity),
+      severitiesToApiParam,
+    };
+  }
 
   const items = ref([]);
   /** SonarQube `total`; 응답에 없으면 null → hasMore 는 배치 길이 휴리스틱 */
@@ -106,17 +100,6 @@ export function useSonarIssuesPaging(refs) {
 
   const loadedCount = computed(() => items.value.length);
 
-  function commonArgs() {
-    return {
-      pageSize: pageSize.value,
-      componentKeys: componentKeys.value,
-      filterSeverities: filterSeverities.value,
-      filterStatuses: filterStatuses.value,
-      sortBySeverity: sortBySeverity.value,
-      severitiesToApiParam,
-    };
-  }
-
   function recomputeHasMore(lastBatchLen, serverTotal) {
     if (serverTotal != null && typeof serverTotal === "number" && serverTotal >= 0) {
       hasMore.value = items.value.length < serverTotal;
@@ -126,11 +109,11 @@ export function useSonarIssuesPaging(refs) {
       hasMore.value = false;
       return;
     }
-    hasMore.value = lastBatchLen >= pageSize.value;
+    hasMore.value = lastBatchLen >= unref(pageSize);
   }
 
   async function loadFirst() {
-    const ck = String(componentKeys.value ?? "").trim();
+    const ck = resolveComponentKey();
     if (!ck) {
       loading.value = false;
       error.value =
@@ -138,6 +121,10 @@ export function useSonarIssuesPaging(refs) {
       items.value = [];
       total.value = null;
       hasMore.value = false;
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[issues/search] loadFirst skipped: componentKey 비어 있음 (URL projectId·component_projects.json 확인)",
+      );
       return;
     }
 
@@ -149,8 +136,8 @@ export function useSonarIssuesPaging(refs) {
     nextPage.value = 2;
     hasMore.value = false;
 
-    const ps = pageSize.value + 1;
-    const q = buildSearchParams({
+    const ps = unref(pageSize) + 1;
+    const q = buildSonarIssuesSearchParams({
       ...commonArgs(),
       pageIndex: 1,
       ps,
@@ -159,46 +146,49 @@ export function useSonarIssuesPaging(refs) {
     let needFollowUpPages = false;
 
     try {
-      const data = await fetchIssues(q);
+      const data = await fetchIssues(q, "loadFirst");
       total.value = extractTotal(data);
       const list = extractIssuesList(data);
-      const n = pageSize.value;
+      const n = unref(pageSize);
 
       if (list.length === 0) {
         hasMore.value = total.value != null && total.value > 0;
         needFollowUpPages = hasMore.value;
-        return;
-      }
-
-      if (list.length > n) {
+      } else if (list.length > n) {
         items.value = list.slice(0, n);
         overflowIssue.value = list[n];
         hasMore.value = true;
-        return;
+      } else {
+        items.value = [...list];
+        overflowIssue.value = null;
+        recomputeHasMore(list.length, total.value);
       }
-
-      items.value = [...list];
-      overflowIssue.value = null;
-      recomputeHasMore(list.length, total.value);
     } catch (e) {
       error.value = String(e.message || e);
     } finally {
       loading.value = false;
     }
 
-    // total>0인데 첫 페이지 issues가 비면 loadMore는 기본적으로 loading 때문에 막혔을 수 있음.
-    // 빈 테이블에서는 센티널이 뷰에 안 들어와 무한스크롤이 안 도는 경우도 있어 후속 페이지를 당긴다.
+    // total>0인데 첫 페이지 issues가 비면 다음 페이지를 순차 요청(센티널 없이도 목록 채움)
     if (needFollowUpPages && items.value.length === 0) {
-      const maxExtra = 5;
-      for (let i = 0; i < maxExtra && items.value.length === 0 && hasMore.value; i++) {
+      let guard = 0;
+      const maxFollow = 25;
+      while (items.value.length === 0 && hasMore.value && guard < maxFollow) {
+        guard += 1;
         await loadMore({ allowDuringInitialLoad: true });
+      }
+      if (items.value.length === 0 && (total.value ?? 0) > 0) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[issues/search] loadFirst: Sonar total=${total.value}건인데 ${maxFollow}페이지까지 issues가 비었습니다. 정렬·statuses·Sonar 버전을 확인하세요.`,
+        );
       }
     }
   }
 
   async function loadMore(options = {}) {
     const allowDuringInitialLoad = Boolean(options.allowDuringInitialLoad);
-    if (!String(componentKeys.value ?? "").trim()) {
+    if (!resolveComponentKey()) {
       return;
     }
     if (!hasMore.value || loadingMore.value) {
@@ -210,14 +200,14 @@ export function useSonarIssuesPaging(refs) {
     loadingMore.value = true;
     error.value = null;
 
-    const q = buildSearchParams({
+    const q = buildSonarIssuesSearchParams({
       ...commonArgs(),
       pageIndex: nextPage.value,
-      ps: pageSize.value,
+      ps: unref(pageSize),
     });
 
     try {
-      const data = await fetchIssues(q);
+      const data = await fetchIssues(q, "loadMore");
       const t = extractTotal(data);
       if (t != null) {
         total.value = t;
@@ -228,7 +218,14 @@ export function useSonarIssuesPaging(refs) {
         overflowIssue.value = null;
       }
       if (batch.length === 0) {
-        hasMore.value = false;
+        const loaded = items.value.length;
+        const serverTotal = total.value;
+        if (serverTotal != null && typeof serverTotal === "number" && loaded < serverTotal) {
+          nextPage.value += 1;
+          hasMore.value = true;
+        } else {
+          hasMore.value = false;
+        }
         return;
       }
       items.value = [...items.value, ...batch];

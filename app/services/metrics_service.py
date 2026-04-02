@@ -1,16 +1,17 @@
 """
 SonarQube 이슈 전량 수집 후 프로젝트·모듈·Severity 집계 (main-dashboard-platform.md).
 
-- 프로젝트별 Sonar 호출은 asyncio.gather 로 병렬화(세마포어로 동시성 상한).
-- 프로젝트 단위 캐시 + 조합된 대시보드 응답 캐시(TTL 분리).
+- SonarQube 호출은 동시에 여러 건을 날리지 않고, 프로젝트(및 페이징) 단위로 순차(await) 처리.
+- 대시보드는 요청한 projectId 한 건만 집계해 응답(고객사 서버 부하 완화).
+- 프로젝트 단위 캐시 + 대시보드 응답 캐시(TTL 분리).
 """
 from __future__ import annotations
 
-import asyncio
 import time
+from datetime import datetime, timezone
 from typing import Any
 
-from app.config.load_projects import projects_with_keys
+from app.config.load_projects import project_labels_map, projects_with_keys
 from app.core.config import settings
 from app.core.module_extract import (
     chart_stack_bucket,
@@ -21,22 +22,13 @@ from app.core.module_extract import (
 from app.core.severity import STANDARD_SEVERITIES, normalize_from_sonar
 from app.services.sonarqube_client import sonar_client
 
-# 조합된 `/api/metrics/dashboard` 응답
+# 조합된 `/api/metrics/dashboard` 응답 (단일 projectId 기준)
 _CACHE: dict[str, Any] | None = None
 _CACHE_TS: float = 0.0
+_DASH_CACHE_PROJECT: str | None = None
 
-# project_id -> (캐시 시각, byProject 행 dict)
-_PROJECT_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
-
-_SONAR_SEM: asyncio.Semaphore | None = None
-
-
-def _sonar_semaphore() -> asyncio.Semaphore:
-    global _SONAR_SEM
-    if _SONAR_SEM is None:
-        n = max(1, int(settings.metrics_sonar_max_concurrent))
-        _SONAR_SEM = asyncio.Semaphore(n)
-    return _SONAR_SEM
+# project_id -> (캐시 시각, byProject 행 dict, Sonar 이슈 원본 목록)
+_PROJECT_CACHE: dict[str, tuple[float, dict[str, Any], list[dict[str, Any]]]] = {}
 
 
 def _severity_key(raw: str | None) -> str:
@@ -78,6 +70,67 @@ def _high_risk(severity_total: dict[str, int]) -> int:
     return severity_total.get("BLOCKER", 0) + severity_total.get("HIGH", 0)
 
 
+def _issue_export_dict(issue: dict[str, Any], project_id: str, label: str) -> dict[str, Any]:
+    """엑셀/CSV용 펼친 행 — 집계와 동일 OPEN 이슈."""
+    comp = issue.get("component") or ""
+    msg = issue.get("message") or ""
+    if isinstance(msg, str):
+        msg = msg.replace("\r\n", " ").replace("\n", " ").strip()
+    line = issue.get("line")
+    line_out: int | None = line if isinstance(line, int) else None
+    return {
+        "projectId": project_id,
+        "projectLabel": label,
+        "severity": _severity_key(issue.get("severity")),
+        "moduleBucket": chart_stack_bucket(comp, project_id),
+        "component": comp,
+        "line": line_out,
+        "message": msg,
+        "rule": issue.get("rule") or "",
+        "status": issue.get("status") or "",
+        "key": issue.get("key") or "",
+    }
+
+
+def _sort_key_flat(r: dict[str, Any]) -> tuple:
+    ln = r.get("line")
+    ln_key = ln if isinstance(ln, int) else -1
+    return (r["projectLabel"], r["moduleBucket"], r["severity"], r["component"], ln_key)
+
+
+async def export_flat_issues_json() -> dict[str, Any]:
+    """
+    프로젝트별 Module×Severity 집계와 동일 소스(OPEN 전량)를 이슈 단위로 펼친 목록.
+    프로젝트마다 Sonar 호출을 순차 처리(병렬 호출 없음). 캐시가 있으면 재사용.
+    """
+    labels_map = project_labels_map()
+    projects_cfg = projects_with_keys()
+    rows: list[dict[str, Any]] = []
+    errors: list[dict[str, str]] = []
+    for row in projects_cfg:
+        pid = str(row.get("id") or "")
+        res_pid, row_data, err = await _fetch_one_project(row, labels_map)
+        if err is not None:
+            errors.append({"projectId": res_pid, "message": err})
+            continue
+        if row_data is None:
+            continue
+        entry = _PROJECT_CACHE.get(pid)
+        if entry is None or len(entry) < 3:
+            errors.append({"projectId": pid, "message": "no_issue_payload"})
+            continue
+        issues = entry[2]
+        label = labels_map.get(pid) or str(row.get("label") or pid)
+        for issue in issues:
+            rows.append(_issue_export_dict(issue, pid, label))
+    rows.sort(key=_sort_key_flat)
+    return {
+        "generatedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "issues": rows,
+        "errors": errors,
+    }
+
+
 def _search_params(component_key: str, page: int) -> dict[str, str]:
     params: dict[str, str] = {
         "componentKeys": component_key,
@@ -103,12 +156,24 @@ async def fetch_all_issues(component_key: str) -> list[dict[str, Any]]:
     return all_issues
 
 
+def _with_canonical_label(
+    row: dict[str, Any],
+    labels_map: dict[str, str],
+) -> dict[str, Any]:
+    """projectId 기준으로 `component_projects.json` 라벨을 강제(캐시에 남은 옛 label 제거)."""
+    pid = str(row.get("projectId") or "")
+    if pid and pid in labels_map:
+        return {**row, "label": labels_map[pid]}
+    return row
+
+
 def _build_by_project_row(
     issues: list[dict[str, Any]],
     row: dict[str, Any],
+    labels_map: dict[str, str],
 ) -> dict[str, Any]:
     pid = str(row.get("id") or "")
-    label = str(row.get("label") or pid)
+    label = labels_map.get(pid) or str(row.get("label") or pid)
     ck = str(row.get("componentKey") or "")
     st, mods, cstack = _aggregate_issues(issues, pid)
     total = sum(st.values())
@@ -126,29 +191,6 @@ def _build_by_project_row(
     }
 
 
-def _merge_project_row_into_globals(
-    row: dict[str, Any],
-    global_severity: dict[str, int],
-    global_modules: dict[str, dict[str, int]],
-    global_chart_stack: dict[str, dict[str, int]],
-) -> None:
-    st = row["severityTotal"]
-    mods = row["modules"]
-    cstack = row["chartStackModules"]
-    for s, v in st.items():
-        global_severity[s] = global_severity.get(s, 0) + v
-    for mod, counts in mods.items():
-        if mod not in global_modules:
-            global_modules[mod] = _empty_severity_row()
-        for s, v in counts.items():
-            global_modules[mod][s] = global_modules[mod].get(s, 0) + v
-    for b, counts in cstack.items():
-        if b not in global_chart_stack:
-            global_chart_stack[b] = _empty_severity_row()
-        for s, v in counts.items():
-            global_chart_stack[b][s] = global_chart_stack[b].get(s, 0) + v
-
-
 def _prune_project_cache(valid_ids: set[str]) -> None:
     for k in list(_PROJECT_CACHE.keys()):
         if k not in valid_ids:
@@ -157,89 +199,102 @@ def _prune_project_cache(valid_ids: set[str]) -> None:
 
 async def _fetch_one_project(
     row: dict[str, Any],
+    labels_map: dict[str, str],
 ) -> tuple[str, dict[str, Any] | None, str | None]:
-    """(project_id, by_project 행 또는 None, 오류 메시지 또는 None)"""
+    """(project_id, by_project 행 또는 None, 오류 메시지 또는 None). Sonar 호출은 순차 1건씩."""
     pid = str(row.get("id") or "")
-    ck = str(row.get("componentKey") or "")
+    ck = str(row.get("componentKey") or "").strip()
+    now = time.time()
+    proj_ttl = settings.metrics_project_cache_ttl_seconds
+    entry = _PROJECT_CACHE.get(pid)
+    if entry is not None and len(entry) >= 3 and (now - entry[0]) < proj_ttl:
+        return pid, entry[1], None
+
+    if not ck:
+        row_data = _build_by_project_row([], row, labels_map)
+        _PROJECT_CACHE[pid] = (time.time(), row_data, [])
+        return pid, row_data, None
+
     try:
-        async with _sonar_semaphore():
-            issues = await fetch_all_issues(ck)
+        issues = await fetch_all_issues(ck)
     except Exception as e:
         return pid, None, str(e)
-    row_data = _build_by_project_row(issues, row)
-    _PROJECT_CACHE[pid] = (time.time(), row_data)
+    row_data = _build_by_project_row(issues, row, labels_map)
+    _PROJECT_CACHE[pid] = (time.time(), row_data, issues)
     return pid, row_data, None
 
 
-async def compute_dashboard_metrics() -> dict[str, Any]:
-    global _CACHE, _CACHE_TS
+def _empty_dashboard(project_id: str = "") -> dict[str, Any]:
+    es = _empty_severity_row()
+    return {
+        "summary": {"totalIssues": 0, "severityTotal": es, "highRisk": 0},
+        "byProject": [],
+        "globalModules": {},
+        "globalChartStackModules": {},
+        "errors": [{"projectId": project_id or "_", "message": "no_data"}],
+        "projectId": project_id or None,
+    }
+
+
+async def compute_dashboard_metrics(project_id: str | None = None) -> dict[str, Any]:
+    """단일 projectId 집계만 수행. Sonar는 해당 프로젝트(및 issues 페이징)만 순차 호출."""
+    global _CACHE, _CACHE_TS, _DASH_CACHE_PROJECT
     now = time.time()
     dash_ttl = settings.metrics_dashboard_cache_ttl_seconds
-    proj_ttl = settings.metrics_project_cache_ttl_seconds
 
-    if _CACHE is not None and (now - _CACHE_TS) < dash_ttl:
-        return _CACHE
-
+    labels_map = project_labels_map()
     projects_cfg = projects_with_keys()
     valid_ids = {str(r.get("id") or "") for r in projects_cfg}
     _prune_project_cache(valid_ids)
 
-    cached_by_pid: dict[str, dict[str, Any]] = {}
-    to_fetch: list[dict[str, Any]] = []
-    for row in projects_cfg:
-        pid = str(row.get("id") or "")
-        entry = _PROJECT_CACHE.get(pid)
-        if entry is not None and (now - entry[0]) < proj_ttl:
-            cached_by_pid[pid] = entry[1]
-        else:
-            to_fetch.append(row)
+    if not projects_cfg:
+        out = _empty_dashboard()
+        _CACHE = out
+        _CACHE_TS = now
+        _DASH_CACHE_PROJECT = None
+        return out
+
+    pid_req = str(project_id or "").strip() or str(projects_cfg[0].get("id") or "")
+    row_cfg = next((r for r in projects_cfg if str(r.get("id") or "") == pid_req), None)
+    if row_cfg is None:
+        out = _empty_dashboard(pid_req)
+        _CACHE = out
+        _CACHE_TS = now
+        _DASH_CACHE_PROJECT = pid_req
+        return out
+
+    if (
+        _CACHE is not None
+        and _DASH_CACHE_PROJECT == pid_req
+        and (now - _CACHE_TS) < dash_ttl
+    ):
+        return _CACHE
 
     errors: list[dict[str, str]] = []
-    fetched_map: dict[str, dict[str, Any]] = {}
+    res_pid, row_data, err = await _fetch_one_project(row_cfg, labels_map)
+    if err is not None:
+        errors.append({"projectId": res_pid, "message": err})
+    if row_data is None:
+        row_data = _build_by_project_row([], row_cfg, labels_map)
 
-    if to_fetch:
-        results = await asyncio.gather(
-            *[_fetch_one_project(r) for r in to_fetch],
-            return_exceptions=True,
-        )
-        for res in results:
-            if isinstance(res, BaseException):
-                errors.append({"projectId": "_gather", "message": repr(res)})
-                continue
-            pid, row_data, err = res
-            if err is not None:
-                errors.append({"projectId": pid, "message": err})
-                continue
-            if row_data is not None:
-                fetched_map[pid] = row_data
-
-    by_project: list[dict[str, Any]] = []
-    global_severity = _empty_severity_row()
-    global_modules: dict[str, dict[str, int]] = {}
-    global_chart_stack: dict[str, dict[str, int]] = {}
-
-    for row in projects_cfg:
-        pid = str(row.get("id") or "")
-        rdata = cached_by_pid.get(pid) or fetched_map.get(pid)
-        if rdata is None:
-            continue
-        by_project.append(rdata)
-        _merge_project_row_into_globals(rdata, global_severity, global_modules, global_chart_stack)
-
-    total_issues = sum(global_severity.values())
+    row_data = _with_canonical_label(row_data, labels_map)
+    st = row_data["severityTotal"]
+    total = sum(st.values())
 
     out: dict[str, Any] = {
         "summary": {
-            "totalIssues": total_issues,
-            "severityTotal": global_severity,
-            "highRisk": _high_risk(global_severity),
+            "totalIssues": total,
+            "severityTotal": st,
+            "highRisk": _high_risk(st),
         },
-        "byProject": by_project,
-        "globalModules": global_modules,
-        "globalChartStackModules": global_chart_stack,
+        "byProject": [row_data],
+        "globalModules": dict(row_data.get("modules") or {}),
+        "globalChartStackModules": dict(row_data.get("chartStackModules") or {}),
         "errors": errors,
+        "projectId": pid_req,
     }
 
     _CACHE = out
     _CACHE_TS = now
+    _DASH_CACHE_PROJECT = pid_req
     return out

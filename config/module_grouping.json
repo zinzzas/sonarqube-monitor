@@ -13,13 +13,13 @@
       "after": "/fims/",
       "segment_index": 0
     },
-    "java_hihr_tree": {
-      "label": "Java — com/hhi/hihr/ 패키지 이후 경로 트리 (롤업)",
+    "java_tree": {
+      "label": "Java — com/**/ 패키지 이후 경로 트리 (롤업)",
       "strategy": "path_tree",
       "stripPrefixes": ["src/main/java/", "src/main/java"],
       "anchorAfter": "/fims/",
       "chartStackAnchorAfter": "",
-      "maxDepth": 5
+      "maxDepth": 2
     },
     "vue_src_tree": {
       "label": "Vue — src/ 이후 경로 트리 (롤업)",
@@ -31,9 +31,9 @@
     }
   },
   "projectProfiles": {
-    "api-server": "java_hihr_tree",
-    "hihr": "vue_src_tree",
-    "hrcs": "vue_src_tree",
-    "coc": "vue_src_tree"
+    "api-server": "java_tree",
+    "h1": "vue_src_tree",
+    "h2": "vue_src_tree",
+    "c1": "vue_src_tree"
   }
 }

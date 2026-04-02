@@ -32,3 +32,15 @@ def projects_with_keys() -> list[dict[str, Any]]:
             continue
         out.append({**row, "componentKey": key})
     return out
+
+
+def project_labels_map() -> dict[str, str]:
+    """대시보드·API 응답 표시용 라벨 — `component_projects.json`의 id → label 단일 출처."""
+    out: dict[str, str] = {}
+    for row in load_component_projects():
+        pid = str(row.get("id") or "").strip()
+        if not pid:
+            continue
+        lab = str(row.get("label") or "").strip()
+        out[pid] = lab or pid
+    return out

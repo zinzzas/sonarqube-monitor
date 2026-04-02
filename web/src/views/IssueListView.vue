@@ -1,15 +1,16 @@
 <script setup>
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useComponentProjectSelect } from "../composables/useComponentProjectSelect.js";
+import { useIssueListApiTrigger } from "../composables/useIssueListApiTrigger.js";
 import { useSonarIssuesPaging } from "../composables/useSonarIssuesPaging.js";
-import { issueComponentKey, issueMatchesModuleFilter } from "../module.js";
 import { LOAD_MORE_CHEVRON_SRC } from "../loadingOverlay.js";
+import { issueComponentKey, issueMatchesModuleFilter } from "../module.js";
 import {
-  SEVERITY_OPTIONS,
-  STATUS_OPTIONS,
-  displaySeverity,
-  severitiesToApiParam,
+    SEVERITY_OPTIONS,
+    STATUS_OPTIONS,
+    displaySeverity,
+    severitiesToApiParam,
 } from "../severity.js";
 
 const route = useRoute();
@@ -21,9 +22,11 @@ const sonarBaseUrl = ref("");
 const { projectOptions, selectedProjectId, componentKeys } = useComponentProjectSelect();
 
 const pageSize = ref(50);
-const sortBySeverity = ref("severity_desc");
+/** 빈 값 = Sonar 기본 정렬(metrics와 동일하게 s/asc 미전송, 첫 페이지 공백 이슈 완화) */
+const sortBySeverity = ref("");
 const filterSeverities = ref([...SEVERITY_OPTIONS]);
-const filterStatuses = ref([...STATUS_OPTIONS]);
+/** 대시보드 집계(metrics)와 동일하게 OPEN만 — 전체 선택 시 Sonar 파라미터 조합으로 0건이 나오는 환경 방지 */
+const filterStatuses = ref(["OPEN"]);
 
 const MODULE_AUTO_FETCH_MAX = 30;
 
@@ -217,6 +220,9 @@ const loadStateLabel = computed(() => {
 
 const filterHint = computed(() => {
   const parts = [];
+  const nav = route.query.nav;
+  if (nav === "module-matrix") parts.push("진입: Module×Severity");
+  else if (nav === "severity-excel") parts.push("진입: Severity 엑셀");
   if (moduleFilter.value) parts.push(`모듈: ${moduleFilter.value}`);
   const sev = route.query.severity;
   if (typeof sev === "string" && sev && SEVERITY_OPTIONS.includes(sev)) {
@@ -245,15 +251,10 @@ const showModuleFallbackBanner = computed(
     !loadingMore.value,
 );
 
+/** projectId ↔ selectedProjectId 동기화는 `useComponentProjectSelect`에서 처리 */
 watch(
-  () => ({
-    pid: route.params.projectId,
-    sev: route.query.severity,
-  }),
-  ({ pid, sev }) => {
-    if (pid && typeof pid === "string") {
-      selectedProjectId.value = pid;
-    }
+  () => route.query.severity,
+  (sev) => {
     if (typeof sev === "string" && sev && SEVERITY_OPTIONS.includes(sev)) {
       filterSeverities.value = [sev];
     } else {
@@ -264,35 +265,18 @@ watch(
 );
 
 /**
- * Sonar issues/search에 넘기는 조건이 바뀌면 자동 재조회.
- * (이전에는 projectId·componentKeys만 감시해서 ?severity=만 바뀌면 필터만 갱신되고 목록은 이전 API 결과가 남는 버그가 있었음.)
+ * Sonar API 재조회: `?module=` 제외 — 모듈은 클라이언트 필터만 (`useIssueListApiTrigger`).
+ * @see docs/issue-list-navigation.md
  */
-let issuesAutoLoadSeq = 0;
-watch(
-  () => ({
-    name: route.name,
-    projectId: route.params.projectId,
-    ck: String(componentKeys.value || "").trim(),
-    severityQ: String(route.query.severity ?? ""),
-    moduleQ: String(route.query.module ?? ""),
-    sevKey: JSON.stringify([...(filterSeverities.value ?? [])].sort()),
-    stKey: JSON.stringify([...(filterStatuses.value ?? [])].sort()),
-    sort: sortBySeverity.value,
-    ps: pageSize.value,
-  }),
-  () => {
-    if (route.name !== "issues") return;
-    const pid = String(route.params.projectId || "");
-    const ck = String(componentKeys.value || "").trim();
-    if (!pid || !ck) return;
-    const seq = ++issuesAutoLoadSeq;
-    nextTick(() => {
-      if (seq !== issuesAutoLoadSeq) return;
-      onLoadFirst();
-    });
-  },
-  { immediate: true },
-);
+useIssueListApiTrigger({
+  route,
+  componentKeys,
+  filterSeverities,
+  filterStatuses,
+  sortBySeverity,
+  pageSize,
+  onLoadFirst,
+});
 
 function onProjectSelectChange() {
   const id = selectedProjectId.value;
