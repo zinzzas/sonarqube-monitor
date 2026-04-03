@@ -18,6 +18,8 @@ import {
   getModuleTreeDefaultExpandDepth,
   getProfileForProject,
 } from "../config/moduleGrouping.js";
+import { profileIdForProject } from "../config/moduleGrouping.js";
+import { chartStackAxisLabel, tableModuleKo } from "../lib/moduleSegmentLabels.js";
 import { LOAD_MORE_CHEVRON_SRC } from "../loadingOverlay.js";
 import { buildDefaultExpandedModulePathSet, visibleModuleTreeRows } from "../moduleTree.js";
 import { SEVERITY_OPTIONS } from "../severity.js";
@@ -267,12 +269,13 @@ const pieOptions = {
 
 const stackedBarData = computed(() => {
   const gm = chartStackMapForScope.value;
-  const labels = chartStackLabels.value;
+  const keys = chartStackLabels.value;
+  const profileId = profileIdForProject(scopeId.value);
   return {
-    labels,
+    labels: keys.map((key) => chartStackAxisLabel(profileId, key)),
     datasets: SEVERITY_OPTIONS.map((sev) => ({
       label: sev,
-      data: labels.map((key) => gm[key]?.[sev] ?? 0),
+      data: keys.map((key) => gm[key]?.[sev] ?? 0),
       backgroundColor: SEV_COLORS[sev] ?? "#94a3b8",
     })),
   };
@@ -394,12 +397,6 @@ function toggleModulePath(projectId, path) {
 
 function isModulePathExpanded(projectId, path) {
   return expandedModulePaths.value.has(`${projectId}::${path}`);
-}
-
-function moduleSegmentLabel(path) {
-  if (!path) return "—";
-  const parts = path.split("/");
-  return parts[parts.length - 1] || path;
 }
 
 function csvEscape(v) {
@@ -673,7 +670,7 @@ async function downloadModuleCsv() {
             :disabled="loading || !displaySummary || exportingModuleCsv"
             @click="downloadModuleCsv"
           >
-            {{ exportingModuleCsv ? "준비 중…" : "이슈 펼침 CSV" }}
+            {{ exportingModuleCsv ? "준비 중…" : "이슈 다운로드 CSV" }}
           </button>
         </div>
         <div
@@ -699,10 +696,11 @@ async function downloadModuleCsv() {
             셀 클릭 시 해당 경로 접두로 이슈 목록이 열립니다.
           </p>
           <div class="excel-wrap">
-            <table class="excel">
+            <table class="excel excel--module-bilingual">
               <thead>
                 <tr>
-                  <th>Module</th>
+                  <th>업무명</th>
+                  <th>경로</th>
                   <th
                     v-for="s in SEVERITY_OPTIONS"
                     :key="s"
@@ -715,7 +713,10 @@ async function downloadModuleCsv() {
               </thead>
               <tbody v-if="isPathTreeProject(proj)">
                 <tr v-for="row in pathTreeVisibleRows(proj)" :key="proj.projectId + '-' + row.path">
-                  <td class="excel__name module-tree__module">
+                  <td class="excel__name excel__name--ko">
+                    {{ tableModuleKo(proj.projectId, row.path) }}
+                  </td>
+                  <td class="excel__name module-tree__module excel__path-cell">
                     <div class="module-tree__row" :style="{ paddingLeft: row.depth * 0.85 + 'rem' }">
                       <button
                         v-if="row.hasChild"
@@ -727,7 +728,7 @@ async function downloadModuleCsv() {
                         {{ isModulePathExpanded(proj.projectId, row.path) ? "−" : "+" }}
                       </button>
                       <span v-else class="module-tree__toggle module-tree__toggle--ghost" aria-hidden="true" />
-                      <span class="module-tree__path" :title="row.path">{{ moduleSegmentLabel(row.path) }}</span>
+                      <code class="module-tree__path">{{ row.path }}</code>
                     </div>
                   </td>
                   <td
@@ -759,7 +760,12 @@ async function downloadModuleCsv() {
               </tbody>
               <tbody v-else>
                 <tr v-for="mRow in moduleRowsFor(proj)" :key="proj.projectId + '-' + mRow.name">
-                  <td class="excel__name">{{ mRow.name }}</td>
+                  <td class="excel__name excel__name--ko">
+                    {{ tableModuleKo(proj.projectId, mRow.name) }}
+                  </td>
+                  <td class="excel__name excel__path-cell">
+                    <code>{{ mRow.name }}</code>
+                  </td>
                   <td
                     v-for="s in SEVERITY_OPTIONS"
                     :key="s"

@@ -18,7 +18,7 @@
       "strategy": "path_tree",
       "stripPrefixes": ["src/main/java/", "src/main/java"],
       "anchorAfter": "/fims/",
-      "chartStackAnchorAfter": "",
+      "chartStackAnchorAfter": "/fims/",
       "maxDepth": 2
     },
     "vue_src_tree": {

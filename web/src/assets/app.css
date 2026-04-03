@@ -1611,6 +1611,41 @@ code {
   background: transparent;
 }
 
+/* Module 표: 업무명(한글) + 경로(영문 키) — 첫 두 열 고정 스크롤 */
+.excel--module-bilingual {
+  --excel-ko-col: 7rem;
+}
+
+.excel--module-bilingual th:first-child,
+.excel--module-bilingual td:first-child {
+  width: var(--excel-ko-col);
+  min-width: var(--excel-ko-col);
+  max-width: var(--excel-ko-col);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.excel--module-bilingual th:nth-child(2),
+.excel--module-bilingual td:nth-child(2) {
+  text-align: left;
+  position: sticky;
+  left: var(--excel-ko-col);
+  z-index: 1;
+  background: var(--bg-elevated);
+  box-shadow: 4px 0 8px -4px rgba(15, 23, 42, 0.1);
+  min-width: 12rem;
+}
+
+.excel--module-bilingual .excel__path-cell code {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.excel--module-bilingual .excel__name--ko {
+  font-weight: 600;
+}
+
 .empty-note {
   color: var(--text-muted);
   font-size: 0.95rem;

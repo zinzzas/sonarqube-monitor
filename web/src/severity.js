@@ -19,13 +19,84 @@ export function severitiesToApiParam(selected) {
   return [...new Set(parts)].join(",");
 }
 
-/** SonarQube 이슈 severity → 표준 표시 문자열 */
+/** Sonar 원시 severity 등급 비교 (impacts 병합 시) */
+const SEVERITY_RANK = {
+  BLOCKER: 60,
+  CRITICAL: 55,
+  HIGH: 52,
+  MAJOR: 40,
+  MEDIUM: 38,
+  MINOR: 30,
+  LOW: 25,
+  INFO: 10,
+};
+
+function severityRank(u) {
+  const k = String(u ?? "").trim().toUpperCase();
+  return SEVERITY_RANK[k] ?? 0;
+}
+
+function pickStrongestSeverity(raws) {
+  let best = "";
+  let bestR = -1;
+  for (const r of raws) {
+    if (r == null || String(r).trim() === "") continue;
+    const u = String(r).trim().toUpperCase();
+    const rr = severityRank(u);
+    if (rr > bestR) {
+      bestR = rr;
+      best = u;
+    }
+  }
+  return best;
+}
+
+/**
+ * Sonar 이슈 객체에서 표시용 severity 원문 추출.
+ * - 최상위 `severity` 우선 (레거시)
+ * - 비어 있으면 `impacts[].severity` 중 가장 높은 등급 (Sonar 10.2+)
+ */
+export function resolveIssueSeverityRaw(issue) {
+  if (!issue || typeof issue !== "object") return "";
+  const top = issue.severity;
+  if (top != null && String(top).trim() !== "") {
+    return String(top).trim();
+  }
+  const impacts = issue.impacts;
+  if (!Array.isArray(impacts) || impacts.length === 0) return "";
+  const fromImpacts = impacts
+    .map((x) => (x && typeof x === "object" ? x.severity : null))
+    .filter((x) => x != null && String(x).trim() !== "");
+  return pickStrongestSeverity(fromImpacts);
+}
+
+/** SonarQube 이슈 severity → 표준 표시 문자열 (대소문자 무시) */
 export function displaySeverity(raw) {
   if (raw == null || raw === "") return "—";
+  const up = String(raw).trim().toUpperCase();
   const m = {
     CRITICAL: "HIGH",
     MAJOR: "MEDIUM",
     MINOR: "LOW",
   };
-  return m[raw] ?? raw;
+  return m[up] ?? up;
+}
+
+/** 이슈 행 단위 표시 (severity + impacts) */
+export function displaySeverityForIssue(issue) {
+  return displaySeverity(resolveIssueSeverityRaw(issue));
+}
+
+/** IssueList pill 클래스용 */
+export function severityPillClassForIssue(issue) {
+  const s = displaySeverityForIssue(issue);
+  if (s === "—") return "sev-default";
+  const m = {
+    BLOCKER: "sev-blocker",
+    HIGH: "sev-high",
+    MEDIUM: "sev-medium",
+    LOW: "sev-low",
+    INFO: "sev-info",
+  };
+  return m[s] ?? "sev-default";
 }

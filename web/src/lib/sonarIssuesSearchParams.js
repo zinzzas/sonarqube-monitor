@@ -4,7 +4,7 @@
  *
  * - `issueStatuses` 는 프론트에서 넣지 않음 — `collect_issues_search_params` 가 mirror 시 추가.
  * - 심각도는 전부 선택이면 파라미터 생략(Sonar 전체).
- * - 정렬은 빈 문자열이면 s/asc 생략(Sonar 기본 순서, 첫 페이지 공백 이슈 완화).
+ * - 정렬: IssueList 기본은 `severity_desc`(높은 심각도 우선) — 첫 페이지만 볼 때 HIGH/BLOCKER가 보이도록 함.
  */
 import { SEVERITY_OPTIONS } from "../severity.js";
 

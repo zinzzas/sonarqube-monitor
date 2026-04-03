@@ -1,12 +1,21 @@
 import mg from "../../../config/module_grouping.json";
 
+/**
+ * `module_grouping.projectProfiles` 의 프로필 id 문자열 (java_tree | vue_src_tree | …).
+ * segment_labels·차트 축 등 프로필 키 단일 출처.
+ */
+export function profileIdForProject(projectId) {
+  const defaultId = mg.defaultProfile ?? "vue_src_tree";
+  if (projectId != null && mg.projectProfiles?.[projectId] != null) {
+    return mg.projectProfiles[projectId];
+  }
+  return defaultId;
+}
+
 /** @returns {Record<string, unknown> | undefined} */
 export function getProfileForProject(projectId) {
+  const pid = profileIdForProject(projectId);
   const defaultId = mg.defaultProfile ?? "vue_src_tree";
-  const pid =
-    projectId && mg.projectProfiles?.[projectId] != null
-      ? mg.projectProfiles[projectId]
-      : defaultId;
   return mg.profiles?.[pid] ?? mg.profiles?.[defaultId];
 }
 

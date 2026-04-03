@@ -1,13 +1,71 @@
 """Component path → 모듈명. `config/module_grouping.json` 의 strategy 로 확장."""
 from __future__ import annotations
 
+from typing import Any
+
 from app.config.load_module_grouping import load_module_grouping
+from app.config.load_module_segment_labels import exclude_rules_for_profile
 from app.core.module_path_tree import (
     chart_stack_bucket as _chart_stack_bucket_path,
     path_tree_cumulative_keys,
     path_tree_leaf_key,
+    rollup_path_after_anchor,
     sonar_relative_path,
 )
+
+
+def _norm_slash(s: str) -> str:
+    return s.replace("\\", "/").strip()
+
+
+def _match_excludes(rest: str, cfg: dict[str, Any]) -> bool:
+    """`module_segment_labels.maps.<profile>.exclude` 규칙 (OR)."""
+    rest_l = _norm_slash(rest).lower()
+    for p in cfg.get("pathPrefixes") or []:
+        pn = _norm_slash(str(p)).strip().lower().rstrip("/")
+        if not pn:
+            continue
+        if rest_l == pn or rest_l.startswith(pn + "/"):
+            return True
+    for sub in cfg.get("pathContains") or []:
+        s = str(sub).lower()
+        if s and s in rest_l:
+            return True
+    parts = [x for x in rest_l.split("/") if x]
+    seg0 = parts[0] if parts else ""
+    for seg in cfg.get("firstSegments") or []:
+        if seg and seg0 == str(seg).strip().lower():
+            return True
+    fname = parts[-1] if parts else ""
+    for sfx in cfg.get("fileSuffixes") or []:
+        if sfx and fname.endswith(str(sfx).lower()):
+            return True
+    return False
+
+
+def is_excluded_from_module_rollup(component: str | None, project_id: str | None) -> bool:
+    """
+    모듈 롤업·스택 차트에서 제외할 경로인지.
+    path_tree: anchorAfter 이후 경로(rollup_path_after_anchor) 기준.
+    split_after: Sonar 상대 경로 전체(프로젝트키: 제외) 기준.
+    Severity 합계에는 여전히 포함(미노출은 모듈/차트 축만).
+    """
+    cfg = exclude_rules_for_profile(profile_id_for_project(project_id))
+    if not cfg:
+        return False
+    profile = _profile_for_project(project_id)
+    strategy = str(profile.get("strategy") or "split_after")
+    if strategy == "path_tree":
+        rest = rollup_path_after_anchor(component, profile)
+        if rest is None:
+            return False
+        if not rest:
+            return False
+        return _match_excludes(rest, cfg)
+    rest = sonar_relative_path(component)
+    if not rest:
+        return False
+    return _match_excludes(rest, cfg)
 
 
 def _profile_for_project(project_id: str | None) -> dict:
@@ -62,8 +120,10 @@ def extract_module(component: str | None, project_id: str | None = None) -> str:
     return "unknown"
 
 
-def chart_stack_bucket(component: str | None, project_id: str | None = None) -> str:
-    """대시보드 스택 막대 1축: path_tree 는 anchor 이후 첫 세그먼트, split_after 는 extract_module."""
+def chart_stack_bucket(component: str | None, project_id: str | None = None) -> str | None:
+    """대시보드 스택 막대 1축: path_tree 는 anchor 이후 첫 세그먼트, split_after 는 extract_module. 제외 시 None."""
+    if is_excluded_from_module_rollup(component, project_id):
+        return None
     profile = _profile_for_project(project_id)
     strategy = str(profile.get("strategy") or "split_after")
     if strategy == "path_tree":
@@ -72,7 +132,9 @@ def chart_stack_bucket(component: str | None, project_id: str | None = None) -> 
 
 
 def extract_path_keys_for_rollup(component: str | None, project_id: str | None = None) -> list[str]:
-    """이슈 1건이 기여하는 모듈 키 목록 (path_tree 는 누적, split_after 는 1개)."""
+    """이슈 1건이 기여하는 모듈 키 목록 (path_tree 는 누적, split_after 는 1개). 제외 시 빈 목록."""
+    if is_excluded_from_module_rollup(component, project_id):
+        return []
     profile = _profile_for_project(project_id)
     strategy = str(profile.get("strategy") or "split_after")
     if strategy == "path_tree":

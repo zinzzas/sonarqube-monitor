@@ -8,7 +8,7 @@
   {
     "id": "h1",
     "label": "h1 Web (Vue)",
-    "componentKey": "2319-all",
+    "componentKey": "devopsportal-fe",
     "stack": "vue"
   },
   {

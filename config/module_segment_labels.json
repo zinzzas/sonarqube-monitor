@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "maps": {
+    "java_tree": {
+      "exclude": {
+        "_note": "샘플은 예시이며 필요 없으면 배열 비우기. path_tree: /fims/ 앵커 이후 경로 기준",
+        "pathPrefixes": [
+          "generated"
+        ],
+        "pathContains": [
+          "/mock/"
+        ],
+        "firstSegments": [],
+        "fileSuffixes": [
+          "package-info.java"
+        ]
+      },
+      "tree": {
+        "portal": {
+          "label": "포털",
+          "children": {
+            "common": { "label": "공통" },
+            "domain": { "label": "업무영역" },
+            "external": { "label": "외부 연동" }
+          }
+        },
+        "atm": {
+          "label": "ATM"
+        }
+      }
+    },
+    "vue_src_tree": {
+      "_note": "src/ 제거 후 첫 세그먼트가 views·components·api 등 다양함. api만 두면 views/... 경로는 unknown. 접두 스킵 매칭(moduleSegmentLabels)으로 views/foo/api/common → api/common 도 라벨 가능",
+      "exclude": {
+        "_note": "샘플은 예시이며 필요 없으면 배열 비우기. src/ strip 후 첫 세그먼트 기준(앵커 없음)",
+        "pathPrefixes": [
+          "assets"
+        ],
+        "pathContains": [
+          "__mocks__",
+          "Dockerfile"
+        ],
+        "firstSegments": [
+          "public"
+        ],
+        "fileSuffixes": [
+          ".stories.ts",
+          ".stories.vue",
+          ".spec.ts",
+          ".test.ts"
+        ]
+      },
+      "tree": {
+        "views": { "label": "뷰" },
+        "components": { "label": "컴포넌트" },
+        "router": { "label": "라우터" },
+        "assets": { "label": "에셋" },
+        "api": {
+          "label": "API",
+          "children": {
+            "common": { "label": "공통" },
+            "domain": { "label": "업무영역" },
+            "external": { "label": "외부 연동" }
+          }
+        }
+      }
+    }
+  }
+}

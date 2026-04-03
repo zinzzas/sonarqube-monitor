@@ -7,10 +7,11 @@ import { useSonarIssuesPaging } from "../composables/useSonarIssuesPaging.js";
 import { LOAD_MORE_CHEVRON_SRC } from "../loadingOverlay.js";
 import { issueComponentKey, issueMatchesModuleFilter } from "../module.js";
 import {
-    SEVERITY_OPTIONS,
-    STATUS_OPTIONS,
-    displaySeverity,
-    severitiesToApiParam,
+  SEVERITY_OPTIONS,
+  STATUS_OPTIONS,
+  displaySeverityForIssue,
+  severitiesToApiParam,
+  severityPillClassForIssue,
 } from "../severity.js";
 
 const route = useRoute();
@@ -22,8 +23,11 @@ const sonarBaseUrl = ref("");
 const { projectOptions, selectedProjectId, componentKeys } = useComponentProjectSelect();
 
 const pageSize = ref(50);
-/** 빈 값 = Sonar 기본 정렬(metrics와 동일하게 s/asc 미전송, 첫 페이지 공백 이슈 완화) */
-const sortBySeverity = ref("");
+/**
+ * 기본: Severity 높은 순 — 대시보드처럼 전량 집계가 아니라 첫 페이지만 보므로,
+ * Sonar 기본 정렬(생성일 등)이면 HIGH/BLOCKER가 뒤 페이지에만 있어 미노출처럼 보일 수 있음.
+ */
+const sortBySeverity = ref("severity_desc");
 const filterSeverities = ref([...SEVERITY_OPTIONS]);
 /** 대시보드 집계(metrics)와 동일하게 OPEN만 — 전체 선택 시 Sonar 파라미터 조합으로 0건이 나오는 환경 방지 */
 const filterStatuses = ref(["OPEN"]);
@@ -57,18 +61,6 @@ const severitySortOptions = [
   { value: "creation_asc", label: "생성일 · 오래된 순" },
   { value: "", label: "기본 (SonarQube 서버 기본)" },
 ];
-
-const severityClass = (raw) => {
-  const s = displaySeverity(raw);
-  const m = {
-    BLOCKER: "sev-blocker",
-    HIGH: "sev-high",
-    MEDIUM: "sev-medium",
-    LOW: "sev-low",
-    INFO: "sev-info",
-  };
-  return m[s] ?? "sev-default";
-};
 
 function authorCell(row) {
   return row.authorName || row.author || "—";
@@ -301,11 +293,7 @@ function onProjectSelectChange() {
       <p class="hero__eyebrow">Issue monitoring</p>
       <h1>프로젝트별 이슈 상세 목록</h1>
       <p class="hero__sub">
-        대시보드에서 숫자를 눌러 들어온 경우, 아래에 모듈·Severity 필터가 반영됩니다. Severity·Status·정렬·pageSize를
-        바꾸면 같은 조건으로 자동 재조회합니다. 표는 스크롤 시 다음 페이지가 이어 붙습니다. 모듈 경로 필터는 Sonar API에
-        직접 전달되지 않아, 해당 경로 이슈가
-        뒤쪽 페이지에만 있으면 자동으로 추가 페이지를 불러옵니다(최대
-        {{ MODULE_AUTO_FETCH_MAX }}회).
+        대시보드에서 숫자를 눌러 들어온 경우, 아래에 모듈·Severity 필터가 반영됩니다. 표는 스크롤 시 다음 페이지가 이어 붙습니다.
       </p>
     </header>
 
@@ -455,8 +443,8 @@ function onProjectSelectChange() {
             :key="issueRowStableKey(row, idx)"
           >
             <td>
-              <span class="pill" :class="severityClass(row.severity)">
-                {{ displaySeverity(row.severity) }}
+              <span class="pill" :class="severityPillClassForIssue(row)">
+                {{ displaySeverityForIssue(row) }}
               </span>
             </td>
             <td>{{ row.status || "—" }}</td>

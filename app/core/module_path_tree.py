@@ -31,15 +31,19 @@ def _looks_like_file(seg: str) -> bool:
     return bool(base)
 
 
-def path_tree_cumulative_keys(component: str | None, profile: dict[str, Any]) -> list[str]:
+def _drop_leading_src_segments(parts: list[str]) -> list[str]:
     """
-    이슈가 기여하는 경로 노드 키 (롤업).
-    예: atm/annualmonthlyleaveplanaccrual → ["atm", "atm/annualmonthlyleaveplanaccrual"]
+    stripPrefixes 로 `src/` 한 번만 제거되면 `src/src/...` 첫 세그먼트가 `src`로 남을 수 있다.
+    또한 일부 경로는 `src` 세그먼트가 남아 `src/api/...` 형태로 집계되어 segment_labels 의 `api` 트리와 불일치한다.
+    Vue 등에서 `src` 를 소스 루트로 볼 때 선행 `src` 세그먼트를 반복 제거한다.
     """
-    path = sonar_relative_path(component)
-    if not path:
-        return []
+    out = list(parts)
+    while out and out[0].lower() == "src":
+        out.pop(0)
+    return out
 
+
+def _strip_prefixes_path(path: str, profile: dict[str, Any]) -> str:
     raw = profile.get("stripPrefixes") or ["src/"]
     if isinstance(raw, str):
         strip_prefixes = [raw]
@@ -57,15 +61,58 @@ def path_tree_cumulative_keys(component: str | None, profile: dict[str, Any]) ->
             break
     if rest is None:
         rest = path
+    return rest
 
+
+def rollup_path_after_anchor(component: str | None, profile: dict[str, Any]) -> str | None:
+    """
+    stripPrefixes 적용 후 anchorAfter 이후 경로 (path_tree 집계·exclude 판정 기준).
+    anchorAfter가 비어 있지 않은데 매칭 실패 시 None (unknown 브랜치).
+    """
+    path = sonar_relative_path(component)
+    if not path:
+        return ""
+    rest = _strip_prefixes_path(path, profile)
     anchor = _norm_slash(str(profile.get("anchorAfter") or ""))
     if anchor:
         m = re.search(re.escape(anchor), rest, re.IGNORECASE)
         if not m:
-            return ["unknown"]
+            return None
         rest = rest[m.end() :].lstrip("/")
+    return rest
+
+
+def chart_rest_after_anchor(component: str | None, profile: dict[str, Any]) -> str:
+    """스택 차트용: chartStackAnchorAfter 또는 anchorAfter 이후 경로."""
+    path = sonar_relative_path(component)
+    if not path:
+        return ""
+    rest = _strip_prefixes_path(path, profile)
+    if "chartStackAnchorAfter" in profile:
+        anchor = _norm_slash(str(profile.get("chartStackAnchorAfter") or ""))
+    else:
+        anchor = _norm_slash(str(profile.get("anchorAfter") or ""))
+    if anchor:
+        m = re.search(re.escape(anchor), rest, re.IGNORECASE)
+        if not m:
+            return ""
+        rest = rest[m.end() :].lstrip("/")
+    return rest
+
+
+def path_tree_cumulative_keys(component: str | None, profile: dict[str, Any]) -> list[str]:
+    """
+    이슈가 기여하는 경로 노드 키 (롤업).
+    예: atm/annualmonthlyleaveplanaccrual → ["atm", "atm/annualmonthlyleaveplanaccrual"]
+    """
+    rest = rollup_path_after_anchor(component, profile)
+    if rest is None:
+        return ["unknown"]
+    if not rest:
+        return []
 
     parts = [x for x in rest.split("/") if x]
+    parts = _drop_leading_src_segments(parts)
     while parts and _looks_like_file(parts[-1]):
         parts = parts[:-1]
     if not parts:
@@ -92,39 +139,12 @@ def chart_stack_bucket(component: str | None, profile: dict[str, Any]) -> str:
     스택 막대용: strip 후 chartStackAnchorAfter(없으면 anchorAfter) 다음의 첫 경로 세그먼트만.
     split_after 는 module_extract.chart_stack_bucket 에서 처리.
     """
-    path = sonar_relative_path(component)
-    if not path:
+    rest = chart_rest_after_anchor(component, profile)
+    if not rest:
         return "unknown"
 
-    raw = profile.get("stripPrefixes") or ["src/"]
-    if isinstance(raw, str):
-        strip_prefixes = [raw]
-    else:
-        strip_prefixes = list(raw)
-    strip_prefixes = [_norm_slash(p) for p in strip_prefixes if p]
-
-    rest: str | None = None
-    pl = path.lower()
-    for p in sorted(strip_prefixes, key=len, reverse=True):
-        pn = p.lower()
-        idx = pl.find(pn)
-        if idx >= 0:
-            rest = path[idx + len(p) :].lstrip("/")
-            break
-    if rest is None:
-        rest = path
-
-    if "chartStackAnchorAfter" in profile:
-        anchor = _norm_slash(str(profile.get("chartStackAnchorAfter") or ""))
-    else:
-        anchor = _norm_slash(str(profile.get("anchorAfter") or ""))
-    if anchor:
-        m = re.search(re.escape(anchor), rest, re.IGNORECASE)
-        if not m:
-            return "unknown"
-        rest = rest[m.end() :].lstrip("/")
-
     parts = [x for x in rest.split("/") if x]
+    parts = _drop_leading_src_segments(parts)
     while parts and _looks_like_file(parts[-1]):
         parts = parts[:-1]
     if not parts:

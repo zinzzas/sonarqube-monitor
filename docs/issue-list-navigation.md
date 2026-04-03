@@ -14,6 +14,7 @@
 1. **API 재조회**는 `web/src/composables/useIssueListApiTrigger.js`에서만 트리거한다. 의존성에 **`route.query.module`을 넣지 않는다.** (과거: `module` 변경 시 `loadFirst` 재호출 → 목록이 비는 재현)
 2. **모듈 자동 추가 로드**는 `IssueListView.vue`의 기존 `watch`(모듈 필터 + `loadMore`)가 담당한다.
 3. **쿼리 조립**은 `web/src/lib/sonarIssuesSearchParams.js` (집계와 동일한 최소 규칙).
+4. **정렬**: 대시보드는 이슈를 **전 페이지** 페이징해 집계하지만, 상세 목록은 **첫 페이지(기본 50건)** 만 즉시 본다. Sonar **기본 정렬**이면 HIGH/BLOCKER가 뒤쪽 페이지에만 있어 “미노출”처럼 보일 수 있어, 기본 정렬을 **`severity_desc`(높은 심각도 우선)** 로 둔다. 표시는 `severity` + Sonar 10.2+ `impacts[].severity` 를 `web/src/severity.js`에서 합친다.
 
 ## 관련 소스
 

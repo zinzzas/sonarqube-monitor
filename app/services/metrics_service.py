@@ -60,9 +60,10 @@ def _aggregate_issues(
                 modules[mod] = _empty_severity_row()
             modules[mod][sev] = modules[mod].get(sev, 0) + 1
         b = chart_stack_bucket(comp, project_id)
-        if b not in chart_stack:
-            chart_stack[b] = _empty_severity_row()
-        chart_stack[b][sev] = chart_stack[b].get(sev, 0) + 1
+        if b is not None and b != "":
+            if b not in chart_stack:
+                chart_stack[b] = _empty_severity_row()
+            chart_stack[b][sev] = chart_stack[b].get(sev, 0) + 1
     return severity_total, modules, chart_stack
 
 
@@ -82,7 +83,7 @@ def _issue_export_dict(issue: dict[str, Any], project_id: str, label: str) -> di
         "projectId": project_id,
         "projectLabel": label,
         "severity": _severity_key(issue.get("severity")),
-        "moduleBucket": chart_stack_bucket(comp, project_id),
+        "moduleBucket": chart_stack_bucket(comp, project_id) or "",
         "component": comp,
         "line": line_out,
         "message": msg,
