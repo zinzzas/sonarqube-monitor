@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import urlparse
 
-from pydantic import field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # app/core/config.py → project root (always load .env from repo root, not cwd)
@@ -33,10 +33,14 @@ class Settings(BaseSettings):
     SonarQube 10.4+ 에서 `statuses` 필터가 `issueStatuses` 로 이전된 인스턴스용.
     True 이면 요청에 `statuses`만 있을 때 동일 값을 `issueStatuses` 로 한 번 더 붙여 전달한다.
     """
-    sonar_http_log_level: Literal["off", "info", "debug"] = "debug"
+    http_log_level: Literal["off", "info", "debug"] = Field(
+        default="debug",
+        validation_alias=AliasChoices("http_log_level", "sonar_http_log_level"),
+    )
     """
-    업스트림 SonarQube HTTP 호출 로깅.
-    `off`: 미출력. `info`: 메서드·전체 URL 한 줄. `debug`: 쿼리 파라미터·curl 예시 추가.
+    Sonar 업스트림 + 내부 `/api/*` 응답 로깅 (동일 레벨).
+    환경 변수: `HTTP_LOG_LEVEL` 또는 기존 `SONAR_HTTP_LOG_LEVEL`.
+    `off`: 미출력. `info`: 요청/응답 한 줄(상태·건수·소요시간). `debug`: 쿼리·curl·본문 요약.
     """
 
     metrics_project_cache_ttl_seconds: float = 120.0
@@ -97,9 +101,9 @@ class Settings(BaseSettings):
             return v.strip()
         return v
 
-    @field_validator("sonar_http_log_level", mode="before")
+    @field_validator("http_log_level", mode="before")
     @classmethod
-    def normalize_sonar_http_log_level(cls, v: object) -> str:
+    def normalize_http_log_level(cls, v: object) -> str:
         if v is None or v == "":
             return "off"
         if not isinstance(v, str):

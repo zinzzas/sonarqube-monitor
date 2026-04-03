@@ -6,7 +6,7 @@ import httpx
 
 from app.core.config import settings
 from app.core.exceptions import SonarConfigError, SonarParseError
-from app.services.sonar_http_log import log_sonar_outgoing_request
+from app.services.app_http_log import log_sonar_outgoing_request, log_sonar_response
 
 logger = logging.getLogger(__name__)
 
@@ -45,41 +45,79 @@ class SonarQubeClient:
             proxy=proxy,
         )
 
+    async def _get(
+        self,
+        path: str,
+        params: Mapping[str, Any] | Sequence[tuple[str, Any]] | None = None,
+    ) -> httpx.Response:
+        """FastAPI → Sonar 업스트림 GET. 호출 직전 `log_sonar_outgoing_request` 단일 진입."""
+        log_sonar_outgoing_request(method="GET", path=path, params=params)
+        async with self._client() as client:
+            return await client.get(path, params=params)
+
     async def issues_search(
         self,
         params: Mapping[str, str] | Sequence[tuple[str, str]],
     ) -> dict:
-        log_sonar_outgoing_request(method="GET", path="/api/issues/search", params=params)
-        async with self._client() as client:
-            r = await client.get("/api/issues/search", params=params)
-            if r.is_error:
-                logger.warning(
-                    "SonarQube %s %s — %s",
-                    r.status_code,
-                    r.request.url,
-                    (r.text or "")[:800],
-                )
+        r = await self._get("/api/issues/search", params)
+        if r.is_error:
+            log_sonar_response(
+                path="/api/issues/search",
+                response=r,
+                body_preview=(r.text or "")[:800],
+            )
+            logger.warning(
+                "SonarQube %s %s — %s",
+                r.status_code,
+                r.request.url,
+                (r.text or "")[:800],
+            )
             r.raise_for_status()
-            return self._response_json(r, context="issues/search")
+        data = self._response_json(r, context="issues/search")
+        issues = data.get("issues") or []
+        paging = data.get("paging") or {}
+        total: int | None = None
+        if isinstance(paging, dict):
+            t = paging.get("total")
+            if isinstance(t, int):
+                total = t
+        log_sonar_response(
+            path="/api/issues/search",
+            response=r,
+            issues_count=len(issues) if isinstance(issues, list) else 0,
+            paging_total=total,
+        )
+        return data
 
     async def request_status(self, path: str, params: dict[str, Any] | None = None) -> tuple[int, object]:
         """HTTP 코드와 본문(JSON 가능 시 dict)."""
-        log_sonar_outgoing_request(method="GET", path=path, params=params or {})
-        async with self._client() as client:
-            r = await client.get(path, params=params or {})
-            body: object = r.text
-            try:
-                body = r.json()
-            except json.JSONDecodeError:
-                pass
-            if r.is_error:
-                logger.warning(
-                    "SonarQube %s %s — %s",
-                    r.status_code,
-                    r.request.url,
-                    (r.text or "")[:800],
-                )
-            return r.status_code, body
+        r = await self._get(path, params or {})
+        body: object = r.text
+        try:
+            body = r.json()
+        except json.JSONDecodeError:
+            pass
+        if r.is_error:
+            logger.warning(
+                "SonarQube %s %s — %s",
+                r.status_code,
+                r.request.url,
+                (r.text or "")[:800],
+            )
+        kind = "dict" if isinstance(body, dict) else ("list" if isinstance(body, list) else "text")
+        preview: str | None = None
+        if settings.http_log_level == "debug":
+            if isinstance(body, (dict, list)):
+                preview = json.dumps(body, ensure_ascii=False)[:500]
+            elif isinstance(body, str):
+                preview = body[:500]
+        log_sonar_response(
+            path=path,
+            response=r,
+            body_kind=kind,
+            body_preview=preview,
+        )
+        return r.status_code, body
 
     def _response_json(self, r: httpx.Response, *, context: str) -> dict:
         if not r.content:

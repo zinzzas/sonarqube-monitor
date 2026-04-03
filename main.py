@@ -6,6 +6,9 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api import api_router
+from app.services.app_http_log import InternalApiLogMiddleware, configure_http_logging
+
+configure_http_logging()
 
 app = FastAPI(title="SonarQube Monitor", version="0.1.0")
 
@@ -16,6 +19,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(InternalApiLogMiddleware)
 
 app.include_router(api_router, prefix="/api")
 
