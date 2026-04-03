@@ -41,7 +41,7 @@ class SonarQubeClient:
             timeout=httpx.Timeout(60.0),
             verify=settings.sonar_ssl_verify,
             follow_redirects=True,
-            trust_env=True,
+            trust_env=settings.sonar_httpx_trust_env,
             proxy=proxy,
         )
 

@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     """기업망 SSL 가로채기 시 SONAR_SSL_VERIFY=false (보안상 권장하지 않음)."""
     sonar_proxy: str = ""
     """선택: 사내 프록시 URL (예: http://proxy.company:8080). 비우면 HTTP_PROXY/HTTPS_PROXY 환경 변수 사용."""
+    sonar_httpx_trust_env: bool = True
+    """
+    httpx `trust_env`. Windows에서만 시스템/도구가 설정한 `HTTP_PROXY`/`HTTPS_PROXY` 때문에
+    내부 Sonar로 요청이 잘못 라우팅되거나 응답이 비어 보일 때 `false` 로 끈다.
+    `SONAR_PROXY`는 여전히 적용된다.
+    """
     sonar_sample_component_keys: str = ""
     """Optional default for `/api/issues/search` when `componentKeys` is omitted (e.g. project key)."""
     sonar_mirror_issue_statuses: bool = False
@@ -86,6 +92,17 @@ class Settings(BaseSettings):
     @field_validator("sonar_ssl_verify", mode="before")
     @classmethod
     def parse_ssl_verify(cls, v: object) -> bool:
+        if isinstance(v, str):
+            s = v.strip().lower()
+            if s in ("0", "false", "no", "off"):
+                return False
+            if s in ("1", "true", "yes", "on"):
+                return True
+        return bool(v) if v is not None else True
+
+    @field_validator("sonar_httpx_trust_env", mode="before")
+    @classmethod
+    def parse_sonar_httpx_trust_env(cls, v: object) -> bool:
         if isinstance(v, str):
             s = v.strip().lower()
             if s in ("0", "false", "no", "off"):

@@ -120,6 +120,7 @@ notepad .env
 | `SONAR_TOKEN` | 분석/이슈 조회용 토큰 |
 | `SONAR_SAMPLE_COMPONENT_KEYS` | (선택) UI에서 `componentKeys` 생략 시 기본 프로젝트 키 |
 | `HTTP_LOG_LEVEL` | (선택) Sonar 업스트림 + 내부 `/api/*` 응답 로깅: `off` / `info` / `debug`. 기존 `SONAR_HTTP_LOG_LEVEL`과 동일 의미(호환). |
+| `SONAR_HTTPX_TRUST_ENV` | (선택) 기본 `true`. Windows에서 `HTTP_PROXY` 등으로 Sonar 요청이 꼬이면 `false` — httpx가 환경 변수 프록시를 무시한다. 필요 시 `SONAR_PROXY`로만 지정. |
 
 Sonar 호스트·토큰은 **코드에 넣지 말고 `.env`만** 수정합니다. 그 외 옵션(`SONAR_AUTH`, `SONAR_PROXY` 등)은 `.env` 안 주석을 참고합니다.
 

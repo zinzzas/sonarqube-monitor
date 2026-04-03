@@ -1,3 +1,5 @@
+import asyncio
+
 import httpx
 from fastapi import APIRouter, HTTPException, Query
 
@@ -27,8 +29,13 @@ async def sonar_diagnostic(
     component_keys: str = Query("2320-all", alias="componentKeys"),
 ) -> dict:
     """
-    SonarQube 연결 분리 진단: `/api/system/status` vs `/api/issues/search?ps=1`.
-    둘 다 503이면 서버/LB/VPN 쪽, system만 200·issues만 503이면 검색·ES 쪽 이슈 가능성이 큼.
+    SonarQube 연결 분리 진단.
+
+    - `/api/authentication/validate` → 토큰만 검증(가벼움). `valid:true` 만으로 네트워크·인증은 정상일 수 있음.
+    - `/api/issues/search` → 검색 백엔드(Elasticsearch 등) 사용. 여기만 멈추면 **Sonar 서버 측 검색/인덱스** 의심.
+    - `/api/system/status` → 인스턴스 상태.
+
+    validate·system 은 빠른데 issues 만 무한 대기/타임아웃이면 클라이언트(Windows·curl) 문제가 아니라 **Sonar 쪽 issues 검색**을 점검하는 편이 맞다.
     """
     out: dict = {
         "sonar_base_url": settings.sonar_base_url,
@@ -53,15 +60,29 @@ async def sonar_diagnostic(
             }
         return {"http": code, "body": body}
 
+    out["authentication_validate"] = await _safe("/api/authentication/validate")
     out["system_status"] = await _safe("/api/system/status")
-    out["issues_search_probe"] = await _safe(
-        "/api/issues/search",
-        {"componentKeys": component_keys, "ps": "1"},
-    )
-    out["issues_search_probe"]["componentKeys"] = component_keys
+    try:
+        out["issues_search_probe"] = await asyncio.wait_for(
+            _safe(
+                "/api/issues/search",
+                {"componentKeys": component_keys, "ps": "1"},
+            ),
+            timeout=45.0,
+        )
+    except asyncio.TimeoutError:
+        out["issues_search_probe"] = {
+            "http": None,
+            "error": "timeout_after_45s",
+            "componentKeys": component_keys,
+            "hint": "issues/search 가 응답하지 않음 — Sonar 검색(Elasticsearch)·인덱스·부하를 서버 측에서 확인",
+        }
+    else:
+        out["issues_search_probe"]["componentKeys"] = component_keys
     out["read_me"] = (
-        "system_status·issues 모두 503 → SonarQube 또는 앞단 LB/WAF, VPN·사내망 확인. "
-        "system은 200인데 issues만 503 → SonarQube 검색/Elasticsearch 측. "
-        "연결 자체가 안 되면 SONAR_PROXY 또는 HTTP_PROXY/HTTPS_PROXY 환경 변수를 설정."
+        "authentication_validate 가 valid 이고 system_status 가 정상인데 issues_search 만 지연·빈 응답·타임아웃이면 "
+        "SonarQube 서버의 이슈 인덱스·Elasticsearch(또는 내장 검색) 상태·부하를 확인한다(서버 로그, 관리 UI). "
+        "system_status·issues 모두 503 → SonarQube 또는 앞단 LB/WAF, VPN·사내망. "
+        "연결 자체가 안 되면 SONAR_PROXY 또는 HTTP_PROXY/HTTPS_PROXY·SONAR_HTTPX_TRUST_ENV 를 점검."
     )
     return out
