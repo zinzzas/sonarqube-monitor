@@ -7,6 +7,7 @@ SonarQube 이슈 전량 수집 후 프로젝트·모듈·Severity 집계 (main-d
 """
 from __future__ import annotations
 
+import asyncio
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -20,6 +21,11 @@ from app.core.module_extract import (
     profile_id_for_project,
 )
 from app.core.severity import STANDARD_SEVERITIES, normalize_from_sonar
+from app.core.team_high_risk import (
+    aggregate_high_risk_by_team,
+    team_display_order,
+    team_labels_from_config,
+)
 from app.services.sonarqube_client import sonar_client
 
 # 조합된 `/api/metrics/dashboard` 응답 (단일 projectId 기준)
@@ -135,7 +141,7 @@ async def export_flat_issues_json() -> dict[str, Any]:
 def _search_params(component_key: str, page: int) -> dict[str, str]:
     params: dict[str, str] = {
         "componentKeys": component_key,
-        "ps": "500",
+        "ps": str(settings.sonar_issues_page_size),
         "p": str(page),
         "statuses": "OPEN",
     }
@@ -145,15 +151,20 @@ def _search_params(component_key: str, page: int) -> dict[str, str]:
 
 
 async def fetch_all_issues(component_key: str) -> list[dict[str, Any]]:
+    """OPEN 이슈 전량. Sonar 부하 완화를 위해 페이지 크기·페이지 간 대기는 설정으로 조절."""
     all_issues: list[dict[str, Any]] = []
     p = 1
+    page_size = settings.sonar_issues_page_size
+    delay_s = settings.sonar_issues_page_delay_ms / 1000.0
     while True:
         data = await sonar_client.issues_search(_search_params(component_key, p))
         issues = data.get("issues") or []
         all_issues.extend(issues)
-        if len(issues) < 500:
+        if len(issues) < page_size:
             break
         p += 1
+        if delay_s > 0:
+            await asyncio.sleep(delay_s)
     return all_issues
 
 
@@ -178,6 +189,12 @@ def _build_by_project_row(
     ck = str(row.get("componentKey") or "")
     st, mods, cstack = _aggregate_issues(issues, pid)
     total = sum(st.values())
+    hr_by_team = aggregate_high_risk_by_team(
+        issues,
+        pid,
+        severity_key_fn=_severity_key,
+        is_high_risk_fn=lambda s: s in ("BLOCKER", "HIGH"),
+    )
     return {
         "projectId": pid,
         "label": label,
@@ -185,6 +202,7 @@ def _build_by_project_row(
         "totalIssues": total,
         "severityTotal": st,
         "highRisk": _high_risk(st),
+        "highRiskByTeam": hr_by_team,
         "modules": mods,
         "chartStackModules": cstack,
         "moduleProfileId": profile_id_for_project(pid),
@@ -227,8 +245,18 @@ async def _fetch_one_project(
 
 def _empty_dashboard(project_id: str = "") -> dict[str, Any]:
     es = _empty_severity_row()
+    tm_labels = team_labels_from_config()
+    tm_order = team_display_order()
+    empty_teams = {tid: 0 for tid in tm_order} if tm_order else {"shared": 0}
     return {
-        "summary": {"totalIssues": 0, "severityTotal": es, "highRisk": 0},
+        "summary": {
+            "totalIssues": 0,
+            "severityTotal": es,
+            "highRisk": 0,
+            "highRiskByTeam": empty_teams,
+            "highRiskTeamLabels": tm_labels,
+            "highRiskTeamOrder": tm_order,
+        },
         "byProject": [],
         "globalModules": {},
         "globalChartStackModules": {},
@@ -281,12 +309,18 @@ async def compute_dashboard_metrics(project_id: str | None = None) -> dict[str, 
     row_data = _with_canonical_label(row_data, labels_map)
     st = row_data["severityTotal"]
     total = sum(st.values())
+    hr_team = dict(row_data.get("highRiskByTeam") or {})
+    tm_labels = team_labels_from_config()
+    tm_order = team_display_order()
 
     out: dict[str, Any] = {
         "summary": {
             "totalIssues": total,
             "severityTotal": st,
             "highRisk": _high_risk(st),
+            "highRiskByTeam": hr_team,
+            "highRiskTeamLabels": tm_labels,
+            "highRiskTeamOrder": tm_order,
         },
         "byProject": [row_data],
         "globalModules": dict(row_data.get("modules") or {}),

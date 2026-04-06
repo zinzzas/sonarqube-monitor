@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlparse
@@ -40,13 +42,14 @@ class Settings(BaseSettings):
     True 이면 요청에 `statuses`만 있을 때 동일 값을 `issueStatuses` 로 한 번 더 붙여 전달한다.
     """
     http_log_level: Literal["off", "info", "debug"] = Field(
-        default="debug",
+        default="info",
         validation_alias=AliasChoices("http_log_level", "sonar_http_log_level"),
     )
     """
     Sonar 업스트림 + 내부 `/api/*` 응답 로깅 (동일 레벨).
     환경 변수: `HTTP_LOG_LEVEL` 또는 기존 `SONAR_HTTP_LOG_LEVEL`.
-    `off`: 미출력. `info`: 요청/응답 한 줄(상태·건수·소요시간). `debug`: 쿼리·curl·본문 요약.
+    기본 `info`: 한 줄 로그만. `debug`는 내부 API 응답 본문까지 버퍼링하므로 부하·지연이 커질 수 있음.
+    `off`: 미출력. `info`: 요청/응답 한 줄. `debug`: 쿼리·curl·본문 요약.
     """
 
     metrics_project_cache_ttl_seconds: float = 120.0
@@ -54,7 +57,18 @@ class Settings(BaseSettings):
     metrics_dashboard_cache_ttl_seconds: float = 90.0
     """조합된 `/api/metrics/dashboard` 전체 응답 캐시 TTL(초)."""
     metrics_sonar_max_concurrent: int = 4
-    """프로젝트별 `fetch_all_issues` 동시 실행 상한(Sonar 부하 완화)."""
+    """예약: 현재 집계는 프로젝트·페이지 순차 처리만 사용. 병렬 확장 시 상한으로 쓸 수 있음."""
+
+    sonar_http_connect_timeout_seconds: float = Field(default=15.0, ge=1.0, le=300.0)
+    """httpx 연결 타임아웃. Sonar가 응답 없이 붙잡을 때 빠르게 실패."""
+    sonar_http_read_timeout_seconds: float = Field(default=120.0, ge=5.0, le=600.0)
+    """httpx 읽기 타임아웃(issues/search 대량 응답)."""
+    sonar_http_max_connections: int = Field(default=2, ge=1, le=32)
+    """httpx 대 Sonar 동시 연결 상한(모니터 단일 프로세스 기준). 작은 값이 서버 부담을 줄임."""
+    sonar_issues_page_size: int = Field(default=300, ge=1, le=500)
+    """`issues/search` 한 페이지당 건수. 기본 300은 요청당 검색 부하 완화(500이면 호출 횟수는 줄지만 건마다 부담 증가)."""
+    sonar_issues_page_delay_ms: float = Field(default=100.0, ge=0.0, le=60_000.0)
+    """페이징 연속 호출 사이 대기(밀리초). 기본 100ms로 Sonar 검색 백엔드 부하를 분산."""
 
     @field_validator("sonar_base_url", mode="before")
     @classmethod

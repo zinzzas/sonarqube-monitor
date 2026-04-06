@@ -100,15 +100,13 @@ def chart_rest_after_anchor(component: str | None, profile: dict[str, Any]) -> s
     return rest
 
 
-def path_tree_cumulative_keys(component: str | None, profile: dict[str, Any]) -> list[str]:
+def path_tree_segments(component: str | None, profile: dict[str, Any]) -> list[str]:
     """
-    이슈가 기여하는 경로 노드 키 (롤업).
-    예: atm/annualmonthlyleaveplanaccrual → ["atm", "atm/annualmonthlyleaveplanaccrual"]
+    anchor 이후 경로 세그먼트만 (누적 문자열 없음). 팀 매핑·표시용.
+    `path_tree_cumulative_keys` 와 동일한 전처리(파일명 제거, src strip, maxDepth).
     """
     rest = rollup_path_after_anchor(component, profile)
-    if rest is None:
-        return ["unknown"]
-    if not rest:
+    if rest is None or not rest:
         return []
 
     parts = [x for x in rest.split("/") if x]
@@ -120,6 +118,23 @@ def path_tree_cumulative_keys(component: str | None, profile: dict[str, Any]) ->
 
     max_depth = int(profile.get("maxDepth") or 8)
     parts = parts[:max_depth]
+    return parts
+
+
+def path_tree_cumulative_keys(component: str | None, profile: dict[str, Any]) -> list[str]:
+    """
+    이슈가 기여하는 경로 노드 키 (롤업).
+    예: atm/annualmonthlyleaveplanaccrual → ["atm", "atm/annualmonthlyleaveplanaccrual"]
+    """
+    rest = rollup_path_after_anchor(component, profile)
+    if rest is None:
+        return ["unknown"]
+    if not rest:
+        return []
+
+    parts = path_tree_segments(component, profile)
+    if not parts:
+        return []
 
     out: list[str] = []
     acc: list[str] = []

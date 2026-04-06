@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from typing import Any, Mapping, Sequence
@@ -12,12 +13,21 @@ logger = logging.getLogger(__name__)
 
 
 class SonarQubeClient:
+    """
+    SonarQube 업스트림 클라이언트.
+
+    요청마다 새 AsyncClient를 만들지 않고 **연결을 재사용**해 TCP·Sonar 측 부담을 줄인다.
+    `lifespan` 종료 시 `aclose()`로 정리한다.
+    """
+
     def __init__(self) -> None:
         self._base = settings.sonar_base_url.rstrip("/")
         if not self._base:
             raise SonarConfigError("SONAR_BASE_URL is empty after normalization")
+        self._shared: httpx.AsyncClient | None = None
+        self._lock = asyncio.Lock()
 
-    def _client(self) -> httpx.AsyncClient:
+    def _build_client(self) -> httpx.AsyncClient:
         if not settings.sonar_token:
             raise SonarConfigError(
                 "SONAR_TOKEN is missing or empty. Set it in .env (project root) or the environment."
@@ -33,27 +43,50 @@ class SonarQubeClient:
             auth = (settings.sonar_token, "")
 
         proxy = settings.sonar_proxy or None
+        n = settings.sonar_http_max_connections
+        timeout = httpx.Timeout(
+            connect=settings.sonar_http_connect_timeout_seconds,
+            read=settings.sonar_http_read_timeout_seconds,
+            write=settings.sonar_http_read_timeout_seconds,
+            pool=settings.sonar_http_connect_timeout_seconds,
+        )
+        limits = httpx.Limits(max_connections=n, max_keepalive_connections=n)
 
         return httpx.AsyncClient(
             base_url=self._base,
             auth=auth,
             headers=headers,
-            timeout=httpx.Timeout(60.0),
+            timeout=timeout,
+            limits=limits,
             verify=settings.sonar_ssl_verify,
             follow_redirects=True,
             trust_env=settings.sonar_httpx_trust_env,
             proxy=proxy,
         )
 
+    async def _ensure_client(self) -> httpx.AsyncClient:
+        if self._shared is not None:
+            return self._shared
+        async with self._lock:
+            if self._shared is None:
+                self._shared = self._build_client()
+            return self._shared
+
+    async def aclose(self) -> None:
+        async with self._lock:
+            if self._shared is not None:
+                await self._shared.aclose()
+                self._shared = None
+
     async def _get(
         self,
         path: str,
         params: Mapping[str, Any] | Sequence[tuple[str, Any]] | None = None,
     ) -> httpx.Response:
-        """FastAPI → Sonar 업스트림 GET. 호출 직전 `log_sonar_outgoing_request` 단일 진입."""
+        """FastAPI → Sonar 업스트림 GET. 공유 클라이언트 사용."""
         log_sonar_outgoing_request(method="GET", path=path, params=params)
-        async with self._client() as client:
-            return await client.get(path, params=params)
+        client = await self._ensure_client()
+        return await client.get(path, params=params)
 
     async def issues_search(
         self,

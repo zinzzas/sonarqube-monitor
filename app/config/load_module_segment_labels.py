@@ -24,3 +24,10 @@ def exclude_rules_for_profile(profile_id: str) -> dict[str, Any]:
     row = maps.get(profile_id) or {}
     ex = row.get("exclude")
     return ex if isinstance(ex, dict) else {}
+
+
+def team_mapping_config() -> dict[str, Any]:
+    """루트 `teamMapping` — HIGH RISK 팀 집계. 없으면 빈 dict."""
+    data = load_module_segment_labels()
+    tm = data.get("teamMapping")
+    return tm if isinstance(tm, dict) else {}

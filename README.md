@@ -119,8 +119,12 @@ notepad .env
 | `SONAR_BASE_URL` | SonarQube 서버 베이스 URL (예: `https://sonarqube.example.com`) |
 | `SONAR_TOKEN` | 분석/이슈 조회용 토큰 |
 | `SONAR_SAMPLE_COMPONENT_KEYS` | (선택) UI에서 `componentKeys` 생략 시 기본 프로젝트 키 |
-| `HTTP_LOG_LEVEL` | (선택) Sonar 업스트림 + 내부 `/api/*` 응답 로깅: `off` / `info` / `debug`. 기존 `SONAR_HTTP_LOG_LEVEL`과 동일 의미(호환). |
+| `HTTP_LOG_LEVEL` | (선택) 기본 `info`. Sonar 업스트림 + 내부 `/api/*` 로깅: `off` / `info` / `debug`. `debug`는 내부 응답 본문까지 버퍼링해 부하가 커질 수 있음. |
 | `SONAR_HTTPX_TRUST_ENV` | (선택) 기본 `true`. Windows에서 `HTTP_PROXY` 등으로 Sonar 요청이 꼬이면 `false` — httpx가 환경 변수 프록시를 무시한다. 필요 시 `SONAR_PROXY`로만 지정. |
+| `SONAR_ISSUES_PAGE_SIZE` | (선택) 기본 `200`(요청당 부하 완화). 더 빠르게 많이 가져오려면 `500`까지 올릴 수 있음. |
+| `SONAR_ISSUES_PAGE_DELAY_MS` | (선택) 기본 `100`(페이징 사이 100ms). `0`이면 연속 호출. |
+| `SONAR_HTTP_MAX_CONNECTIONS` | (선택) 기본 `2`. httpx가 Sonar에 동시에 열 연결 수 상한. |
+| `SONAR_HTTP_CONNECT_TIMEOUT_SECONDS` / `SONAR_HTTP_READ_TIMEOUT_SECONDS` | (선택) 연결·읽기 타임아웃(초). |
 
 Sonar 호스트·토큰은 **코드에 넣지 말고 `.env`만** 수정합니다. 그 외 옵션(`SONAR_AUTH`, `SONAR_PROXY` 등)은 `.env` 안 주석을 참고합니다.
 

@@ -80,6 +80,11 @@ def _profile_for_project(project_id: str | None) -> dict:
     return profiles.get(pid) or profiles.get(default_id) or {}
 
 
+def profile_for_project(project_id: str | None) -> dict[str, Any]:
+    """`module_grouping.json` 에서 프로젝트별 프로필 dict (strategy, anchor 등)."""
+    return _profile_for_project(project_id)
+
+
 def profile_id_for_project(project_id: str | None) -> str:
     cfg = load_module_grouping()
     default_id = str(cfg.get("defaultProfile") or "vue_src_tree")

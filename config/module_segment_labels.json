@@ -1,5 +1,26 @@
 {
   "version": 1,
+  "teamMapping": {
+    "_note": "HIGH RISK(BLOCKER+HIGH)만 팀 버킷 집계. java_tree·vue_src_tree 동일 규칙. 첫 매칭만 적용.",
+    "precedence": [
+      {
+        "teamId": "team_b",
+        "label": "B팀",
+        "when": { "firstSegment": ["atm"] }
+      },
+      {
+        "teamId": "team_c",
+        "label": "C팀",
+        "when": { "anySegment": ["external"] }
+      },
+      {
+        "teamId": "team_a",
+        "label": "A팀",
+        "when": { "anySegment": ["common", "domain"] }
+      }
+    ],
+    "fallback": { "teamId": "shared", "label": "공통" }
+  },
   "maps": {
     "java_tree": {
       "exclude": {

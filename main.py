@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -7,10 +8,18 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api import api_router
 from app.services.app_http_log import InternalApiLogMiddleware, configure_http_logging
+from app.services.sonarqube_client import sonar_client
 
 configure_http_logging()
 
-app = FastAPI(title="SonarQube Monitor", version="0.1.0")
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    yield
+    await sonar_client.aclose()
+
+
+app = FastAPI(title="SonarQube Monitor", version="0.1.0", lifespan=_lifespan)
 
 app.add_middleware(
     CORSMiddleware,

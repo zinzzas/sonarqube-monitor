@@ -1400,6 +1400,45 @@ code {
   color: var(--text);
 }
 
+.kpi--risk .kpi__value--hr-total {
+  font-size: 1.88rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.kpi--risk .kpi__value--hr-total:not(.kpi__value--hr-total-zero) {
+  color: #b91c1c;
+}
+
+.kpi--risk .kpi__value--hr-total-zero {
+  color: #64748b;
+}
+
+.kpi__team-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.85rem;
+  margin-top: 0.6rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--sev-risk-border);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.kpi__team-chip {
+  font-weight: 600;
+}
+
+.kpi__team-name {
+  margin-right: 0.25rem;
+  opacity: 0.96;
+}
+
+.kpi__team-num {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
 .kpi--mini .kpi__chips {
   display: flex;
   flex-wrap: wrap;
@@ -1429,6 +1468,17 @@ code {
   gap: 1.25rem;
   margin-bottom: 1.25rem;
   align-items: stretch;
+}
+
+/* Severity 분포 | Module 스택 | 팀별 High risk — 나란히(폭이 되면 3열) */
+.dash-charts--triple {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.dashboard .dash-charts .chart-box--pair {
+  height: 320px;
+  min-height: 320px;
+  max-height: 320px;
 }
 
 /* 대시보드 카드: 타이틀·차트·표 가로 줄맞춤 (card--filters 와 동일 인셋) */

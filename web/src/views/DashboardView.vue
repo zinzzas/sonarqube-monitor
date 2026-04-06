@@ -20,6 +20,10 @@ import {
 } from "../config/moduleGrouping.js";
 import { profileIdForProject } from "../config/moduleGrouping.js";
 import { chartStackAxisLabel, tableModuleKo } from "../lib/moduleSegmentLabels.js";
+import {
+  teamLabelsFromSegmentLabels,
+  teamOrderFromSegmentLabels,
+} from "../lib/teamMappingConfig.js";
 import { LOAD_MORE_CHEVRON_SRC } from "../loadingOverlay.js";
 import { buildDefaultExpandedModulePathSet, visibleModuleTreeRows } from "../moduleTree.js";
 import { SEVERITY_OPTIONS } from "../severity.js";
@@ -56,6 +60,51 @@ const CHART_CHROME = {
   grid: "rgba(5, 150, 105, 0.11)",
 };
 
+/**
+ * 건수 고유값(내림차순)별 색: 최다 빨강 → 주황 → 노랑 계열 → 최소는 항상 진녹색.
+ * 전부 0이면 중립 회색.
+ */
+const TEAM_HR_ALL_ZERO = "#94a3b8";
+
+function teamHrRankColor(i, n) {
+  if (n < 2) return TEAM_HR_ALL_ZERO;
+  if (i === 0) return "#b91c1c";
+  if (i === n - 1) return "#15803d";
+  if (i === 1) return "#ea580c";
+  if (i === 2) return "#ca8a04";
+  if (i === 3) return "#eab308";
+  return "#84cc16";
+}
+
+function teamHrColorsByCounts(order, teamCounts) {
+  /** @type {Record<string, string>} */
+  const out = {};
+  for (const tid of order) {
+    out[tid] = TEAM_HR_ALL_ZERO;
+  }
+  const unique = [...new Set(order.map((tid) => teamCounts[tid] ?? 0))].sort((a, b) => b - a);
+  if (unique.length === 1 && unique[0] === 0) {
+    return out;
+  }
+  const n = unique.length;
+  if (n === 1) {
+    const col = "#b91c1c";
+    for (const tid of order) {
+      out[tid] = col;
+    }
+    return out;
+  }
+  unique.forEach((c, i) => {
+    const col = teamHrRankColor(i, n);
+    for (const tid of order) {
+      if ((teamCounts[tid] ?? 0) === c) {
+        out[tid] = col;
+      }
+    }
+  });
+  return out;
+}
+
 const firstProjectId = COMPONENT_PROJECTS[0]?.id ?? "";
 /** 상단 차트·표 범위 — 기본 첫 프로젝트, 콤보 변경 시 해당 projectId로만 집계 API 호출 */
 const scopeId = ref(firstProjectId);
@@ -78,7 +127,10 @@ async function load() {
       qs.toString().length > 0
         ? `/api/metrics/dashboard?${qs}`
         : "/api/metrics/dashboard";
-    const res = await fetch(dashUrl, { signal: controller.signal });
+    const res = await fetch(dashUrl, {
+      signal: controller.signal,
+      cache: "no-store",
+    });
     if (timeoutId) {
       clearTimeout(timeoutId);
       timeoutId = 0;
@@ -153,6 +205,7 @@ const mergedProjectRows = computed(() => {
       totalIssues: 0,
       severityTotal: emptySevRow(),
       highRisk: 0,
+      highRiskByTeam: {},
       modules: {},
       chartStackModules: {},
     };
@@ -171,6 +224,7 @@ const displaySummary = computed(() => {
       totalIssues: row.totalIssues ?? 0,
       highRisk: row.highRisk ?? 0,
       severityTotal: row.severityTotal ?? emptySevRow(),
+      highRiskByTeam: row.highRiskByTeam ?? {},
     };
   }
   return (
@@ -178,9 +232,62 @@ const displaySummary = computed(() => {
       totalIssues: 0,
       highRisk: 0,
       severityTotal: emptySevRow(),
+      highRiskByTeam: {},
     }
   );
 });
+
+/**
+ * 팀 축·라벨: API 우선, 없으면 번들된 `module_segment_labels.json` teamMapping
+ * (uvicorn만 재기동하고 `web/dist` 미빌드인 경우에도 UI 노출).
+ */
+const highRiskTeamLabels = computed(() => ({
+  ...teamLabelsFromSegmentLabels(),
+  ...(payload.value?.summary?.highRiskTeamLabels ?? {}),
+}));
+
+const highRiskTeamOrder = computed(() => {
+  const api = payload.value?.summary?.highRiskTeamOrder;
+  if (Array.isArray(api) && api.length > 0) {
+    return api;
+  }
+  return teamOrderFromSegmentLabels();
+});
+
+/** 선택 프로젝트 기준 팀별 건수 — 축 순서에 맞춰 0 채움 */
+const displayHighRiskByTeam = computed(() => {
+  const order = highRiskTeamOrder.value;
+  const raw = displaySummary.value?.highRiskByTeam ?? {};
+  const out = {};
+  for (const tid of order) {
+    out[tid] = raw[tid] ?? 0;
+  }
+  return out;
+});
+
+/** 건수 내림차순(동률이면 설정 순서 유지) — KPI·막대 X축 */
+const highRiskTeamOrderSorted = computed(() => {
+  const base = highRiskTeamOrder.value;
+  const counts = displayHighRiskByTeam.value;
+  const copy = [...base];
+  copy.sort((a, b) => {
+    const ca = counts[a] ?? 0;
+    const cb = counts[b] ?? 0;
+    if (cb !== ca) return cb - ca;
+    return base.indexOf(a) - base.indexOf(b);
+  });
+  return copy;
+});
+
+/** teamMapping 이 있으면 항상 팀 블록 표시 */
+const showTeamHighRiskUi = computed(
+  () => teamOrderFromSegmentLabels().length > 0 || highRiskTeamOrder.value.length > 0,
+);
+
+/** KPI·막대 그래프 공통 — 팀 id → 순위 색 */
+const teamHrColors = computed(() =>
+  teamHrColorsByCounts(highRiskTeamOrderSorted.value, displayHighRiskByTeam.value),
+);
 
 const scopeLabel = computed(() => activeProjectRow.value?.label ?? scopeId.value);
 
@@ -280,6 +387,69 @@ const stackedBarData = computed(() => {
     })),
   };
 });
+
+/** 팀별 High risk (BLOCKER+HIGH) — 세로 막대, 건수 순위별 색, 많은 팀이 왼쪽 */
+const highRiskTeamBarData = computed(() => {
+  const order = highRiskTeamOrderSorted.value;
+  const labelsMap = highRiskTeamLabels.value;
+  const byTeam = displayHighRiskByTeam.value;
+  const colors = teamHrColors.value;
+  if (!order.length) {
+    return { labels: [], datasets: [] };
+  }
+  const bg = order.map((tid) => colors[tid] ?? TEAM_HR_ALL_ZERO);
+  return {
+    labels: order.map((tid) => labelsMap[tid] ?? tid),
+    datasets: [
+      {
+        label: "High risk",
+        data: order.map((tid) => byTeam[tid] ?? 0),
+        backgroundColor: bg,
+        borderColor: bg,
+        borderWidth: 1,
+        borderRadius: 4,
+      },
+    ],
+  };
+});
+
+const highRiskTeamBarOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  scales: {
+    x: {
+      stacked: false,
+      grid: {
+        color: CHART_CHROME.grid,
+        drawTicks: true,
+      },
+      border: { color: "rgba(16, 185, 129, 0.2)" },
+      ticks: {
+        maxRotation: 32,
+        minRotation: 0,
+        autoSkip: true,
+        color: CHART_CHROME.axis,
+      },
+    },
+    y: {
+      beginAtZero: true,
+      stacked: false,
+      grid: { color: CHART_CHROME.grid },
+      border: { color: "rgba(16, 185, 129, 0.2)" },
+      ticks: { precision: 0, color: CHART_CHROME.axis },
+    },
+  },
+  plugins: {
+    legend: { display: false },
+    tooltip: {
+      bodyColor: "#334155",
+      titleColor: "#334155",
+      borderColor: "rgba(16, 185, 129, 0.25)",
+      borderWidth: 1,
+      backgroundColor: "rgba(255, 255, 255, 0.96)",
+    },
+  },
+};
 
 const stackedBarOptions = {
   responsive: true,
@@ -548,7 +718,30 @@ async function downloadModuleCsv() {
         </div>
         <div class="kpi kpi--risk">
           <span class="kpi__label">High risk (BLOCKER+HIGH)</span>
-          <span class="kpi__value">{{ displaySummary.highRisk.toLocaleString("ko-KR") }}</span>
+          <span
+            class="kpi__value"
+            :class="{
+              'kpi__value--hr-total': true,
+              'kpi__value--hr-total-zero': displaySummary.highRisk === 0,
+            }"
+            >{{ displaySummary.highRisk.toLocaleString("ko-KR") }}</span>
+          <div
+            v-if="showTeamHighRiskUi"
+            class="kpi__team-row"
+            aria-label="팀별 High risk 건수"
+          >
+            <span
+              v-for="tid in highRiskTeamOrderSorted"
+              :key="tid"
+              class="kpi__team-chip"
+              :style="{ color: teamHrColors[tid] }"
+            >
+              <span class="kpi__team-name">{{ highRiskTeamLabels[tid] ?? tid }}</span>
+              <strong class="kpi__team-num">{{
+                (displayHighRiskByTeam[tid] ?? 0).toLocaleString("ko-KR")
+              }}</strong>
+            </span>
+          </div>
         </div>
         <div class="kpi kpi--mini">
           <span class="kpi__label">Severity 합계</span>
@@ -571,7 +764,7 @@ async function downloadModuleCsv() {
         </label>
       </div>
 
-      <div class="dash-charts">
+      <div class="dash-charts dash-charts--triple">
         <div class="card chart-card">
           <div class="card__head">
             <div class="card__head-main">
@@ -579,7 +772,7 @@ async function downloadModuleCsv() {
               <p class="card__subtitle">{{ scopeLabel }}</p>
             </div>
           </div>
-          <div class="chart-box">
+          <div class="chart-box chart-box--pair">
             <Pie v-if="pieChartData.labels.length" :data="pieChartData" :options="pieOptions" />
             <p v-else class="chart-empty">데이터 없음</p>
           </div>
@@ -591,8 +784,28 @@ async function downloadModuleCsv() {
               <p class="card__subtitle">{{ scopeLabel }}{{ stackChartSubtitle }}</p>
             </div>
           </div>
-          <div class="chart-box chart-box--tall">
+          <div class="chart-box chart-box--pair">
             <Bar v-if="chartStackLabels.length" :data="stackedBarData" :options="stackedBarOptions" />
+            <p v-else class="chart-empty">데이터 없음</p>
+          </div>
+        </div>
+        <div
+          v-if="showTeamHighRiskUi"
+          class="card chart-card chart-card--team-hr"
+          aria-label="팀별 High risk 차트"
+        >
+          <div class="card__head">
+            <div class="card__head-main">
+              <h2 class="card__title">팀별 High risk (BLOCKER+HIGH)</h2>
+              <p class="card__subtitle">{{ scopeLabel }} · 경로 세그먼트 기준 팀 매핑</p>
+            </div>
+          </div>
+          <div class="chart-box chart-box--pair">
+            <Bar
+              v-if="highRiskTeamBarData.labels?.length"
+              :data="highRiskTeamBarData"
+              :options="highRiskTeamBarOptions"
+            />
             <p v-else class="chart-empty">데이터 없음</p>
           </div>
         </div>
