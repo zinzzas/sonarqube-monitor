@@ -123,6 +123,8 @@ export function pathSegmentsForTeamMatch(component, projectId) {
   if (strategy === "path_tree") {
     const segs = pathTreeSegments(component, profile);
     if (segs.length) return segs;
+    const anchor = norm(profile.anchorAfter ?? "");
+    if (anchor) return [];
     return stripOnlyPathSegments(component, profile, TEAM_MATCH_MAX_DEPTH);
   }
   const mod = extractModuleFromComponent(component, projectId);
