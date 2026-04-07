@@ -85,6 +85,7 @@ class AdminTeamMappingApiTests(unittest.TestCase):
         metrics_service._CACHE_TS = time.time()
         metrics_service._DASH_CACHE_PROJECT = "any"
         metrics_service._PROJECT_CACHE["proj"] = (time.time(), {}, [])
+        metrics_service._PROJECT_CACHE_BHM["proj"] = (time.time(), {}, [])
         payload = {
             "precedence": [
                 {
@@ -100,6 +101,7 @@ class AdminTeamMappingApiTests(unittest.TestCase):
         self.assertIsNone(metrics_service._CACHE)
         self.assertIsNone(metrics_service._DASH_CACHE_PROJECT)
         self.assertEqual(len(metrics_service._PROJECT_CACHE), 0)
+        self.assertEqual(len(metrics_service._PROJECT_CACHE_BHM), 0)
 
     def test_put_rejects_empty_when(self) -> None:
         payload = {

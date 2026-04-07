@@ -393,3 +393,18 @@ async def fetch_all_issues(component_key: str) -> list[dict[str, Any]]:
         return await _fetch_unfiltered_linear_full(component_key)
 
     return await _fetch_unfiltered_unknown_total(component_key)
+
+
+async def fetch_open_issues_blocker_high_medium(component_key: str) -> list[dict[str, Any]]:
+    """
+    OPEN 이슈 중 플랫폼 기준 BLOCKER / HIGH / MEDIUM에 해당하는 것만.
+
+    Sonar `issues/search`는 CRITICAL→HIGH, MAJOR→MEDIUM 매핑 전 원시 심각도로 필터하므로
+    BLOCKER, CRITICAL, MAJOR 세 번 수집 후 key 기준 병합한다.
+    """
+    acc: list[dict[str, Any]] = []
+    for sonar_sv in ("BLOCKER", "CRITICAL", "MAJOR"):
+        chunk = await _fetch_one_sonar_severity(component_key, sonar_sv)
+        acc.extend(chunk)
+        await _sleep_between_pages()
+    return _dedupe_by_key(acc)

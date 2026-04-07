@@ -7,9 +7,13 @@ router = APIRouter(tags=["metrics"])
 
 @router.get("/metrics/dashboard")
 async def metrics_dashboard(
-    project_id: str | None = Query(None, alias="projectId", description="집계 대상 프로젝트 id"),
+    project_id: str | None = Query(
+        None,
+        alias="projectId",
+        description="집계 대상 프로젝트 id. `all` 이면 전 프로젝트·OPEN·BLOCKER/HIGH/MEDIUM만 병합.",
+    ),
 ) -> dict:
-    """요약 + 선택 프로젝트 모듈·Severity (Sonar 호출은 해당 프로젝트만 순차)."""
+    """요약 + byProject. 단일 id는 전 심각도, `all`은 B·H·M만 순차 수집 후 병합."""
     return await compute_dashboard_metrics(project_id=project_id)
 
 

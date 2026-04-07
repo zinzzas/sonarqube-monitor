@@ -1369,6 +1369,17 @@ code {
   margin-top: 0;
 }
 
+.dashboard-all-banner {
+  margin: 0 0 1rem;
+  padding: 0.65rem 1rem;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: var(--text);
+  background: linear-gradient(90deg, rgba(37, 99, 235, 0.08), rgba(16, 185, 129, 0.08));
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  border-radius: var(--radius-md);
+}
+
 .dash-summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -1408,6 +1419,15 @@ code {
   text-transform: uppercase;
   color: var(--text-muted);
   margin-bottom: 0.35rem;
+}
+
+/* ALL 모드 — B·H·M 풀네임 라벨(한글+영문 혼합) */
+.kpi__label--long {
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-size: 0.7rem;
+  line-height: 1.35;
+  max-width: 22rem;
 }
 
 .kpi__value {

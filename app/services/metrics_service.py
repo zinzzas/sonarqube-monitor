@@ -4,8 +4,9 @@ SonarQube 이슈 전량 수집 후 프로젝트·모듈·Severity 집계.
 문서: docs/03_design/system-architecture.md, docs/02_analysis/functional-spec.md
 
 - SonarQube 호출은 동시에 여러 건을 날리지 않고, 프로젝트(및 페이징) 단위로 순차(await) 처리.
-- 대시보드는 요청한 projectId 한 건만 집계해 응답(고객사 서버 부하 완화).
-- 프로젝트 단위 캐시 + 대시보드 응답 캐시(TTL 분리).
+- 대시보드는 기본적으로 요청한 projectId 한 건만 집계(고객사 서버 부하 완화).
+- `projectId=all` 이면 전 프로젝트를 순차 집계하되, Sonar는 OPEN·BLOCKER/HIGH/MEDIUM(B·H·M)만 수집.
+- 프로젝트 단위 캐시(전체 집계용 / B·H·M 전용) + 대시보드 응답 캐시(TTL 분리).
 """
 from __future__ import annotations
 
@@ -13,7 +14,11 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-from app.config.load_projects import project_labels_map, projects_with_keys
+from app.config.load_projects import (
+    load_component_projects,
+    project_labels_map,
+    projects_with_keys,
+)
 from app.core.config import settings
 from app.core.module_extract import (
     chart_stack_bucket,
@@ -27,15 +32,47 @@ from app.core.team_high_risk import (
     team_display_order,
     team_labels_from_config,
 )
-from app.services.sonarqube_issues_fetch import fetch_all_issues
+from app.services.sonarqube_issues_fetch import (
+    fetch_all_issues,
+    fetch_open_issues_blocker_high_medium,
+)
 
-# 조합된 `/api/metrics/dashboard` 응답 (단일 projectId 기준)
+# 조합된 `/api/metrics/dashboard` 응답 (단일 projectId 또는 all)
 _CACHE: dict[str, Any] | None = None
 _CACHE_TS: float = 0.0
 _DASH_CACHE_PROJECT: str | None = None
 
 # project_id -> (캐시 시각, byProject 행 dict, Sonar 이슈 원본 목록)
 _PROJECT_CACHE: dict[str, tuple[float, dict[str, Any], list[dict[str, Any]]]] = {}
+# 동일 — OPEN 이슈를 B·H·M(Sonar BLOCKER/CRITICAL/MAJOR)만 수집한 집계용
+_PROJECT_CACHE_BHM: dict[str, tuple[float, dict[str, Any], list[dict[str, Any]]]] = {}
+
+# 대시보드 ALL 예약어 — component_projects.json 의 id 와 충돌 시 `projectId` 를 바꾸거나 id 를 변경할 것
+_ALL_SCOPE_TOKEN = "all"
+
+
+def _normalize_dashboard_project_id(project_id: str | None) -> str:
+    """쿼리 projectId — ZWSP 등으로 'all' 분기가 깨지는 것 방지."""
+    if project_id is None:
+        return ""
+    s = str(project_id).strip()
+    for ch in ("\u200b", "\u200c", "\u200d", "\ufeff", "\u200e", "\u200f"):
+        s = s.replace(ch, "")
+    return s.strip()
+
+
+def _component_projects_rows() -> list[dict[str, Any]]:
+    """`component_projects.json` 전체 — id 가 있는 행만 (componentKey 없어도 포함)."""
+    rows = load_component_projects()
+    if not isinstance(rows, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        pid = str(r.get("id") or "").strip()
+        if not pid:
+            continue
+        out.append(r)
+    return out
 
 
 def invalidate_dashboard_cache() -> None:
@@ -43,7 +80,7 @@ def invalidate_dashboard_cache() -> None:
     `module_segment_labels.json` 의 teamMapping 저장 직후 호출.
 
     - 조합된 대시보드 응답 캐시(`_CACHE`) 제거 → summary의 팀 라벨·순서가 파일 기준으로 다시 채워짐.
-    - 프로젝트별 이슈·집계 캐시(`_PROJECT_CACHE`) 제거 → `highRiskByTeam` 이 새 매칭 규칙으로 다시 계산됨
+    - 프로젝트별 이슈·집계 캐시(`_PROJECT_CACHE`, `_PROJECT_CACHE_BHM`) 제거 → `highRiskByTeam` 이 새 매칭 규칙으로 다시 계산됨
       (캐시된 행만 갱신하면 규칙 변경 시 버킷 건수가 어긋날 수 있음).
     """
     global _CACHE, _CACHE_TS, _DASH_CACHE_PROJECT
@@ -51,6 +88,7 @@ def invalidate_dashboard_cache() -> None:
     _CACHE_TS = 0.0
     _DASH_CACHE_PROJECT = None
     _PROJECT_CACHE.clear()
+    _PROJECT_CACHE_BHM.clear()
 
 
 def _severity_key(raw: str | None) -> str:
@@ -200,6 +238,9 @@ def _prune_project_cache(valid_ids: set[str]) -> None:
     for k in list(_PROJECT_CACHE.keys()):
         if k not in valid_ids:
             del _PROJECT_CACHE[k]
+    for k in list(_PROJECT_CACHE_BHM.keys()):
+        if k not in valid_ids:
+            del _PROJECT_CACHE_BHM[k]
 
 
 async def _fetch_one_project(
@@ -229,6 +270,50 @@ async def _fetch_one_project(
     return pid, row_data, None
 
 
+async def _fetch_one_project_bhm(
+    row: dict[str, Any],
+    labels_map: dict[str, str],
+) -> tuple[str, dict[str, Any] | None, str | None]:
+    """OPEN 이슈 중 B·H·M만. 캐시는 전체 집계(`_PROJECT_CACHE`)와 분리."""
+    pid = str(row.get("id") or "")
+    ck = str(row.get("componentKey") or "").strip()
+    now = time.time()
+    proj_ttl = settings.metrics_project_cache_ttl_seconds
+    entry = _PROJECT_CACHE_BHM.get(pid)
+    if entry is not None and len(entry) >= 3 and (now - entry[0]) < proj_ttl:
+        return pid, entry[1], None
+
+    if not ck:
+        row_data = _build_by_project_row([], row, labels_map)
+        _PROJECT_CACHE_BHM[pid] = (time.time(), row_data, [])
+        return pid, row_data, None
+
+    try:
+        issues = await fetch_open_issues_blocker_high_medium(ck)
+    except Exception as e:
+        return pid, None, str(e)
+    row_data = _build_by_project_row(issues, row, labels_map)
+    _PROJECT_CACHE_BHM[pid] = (time.time(), row_data, issues)
+    return pid, row_data, None
+
+
+def _merge_severity_totals_from_rows(rows: list[dict[str, Any]]) -> dict[str, int]:
+    out = _empty_severity_row()
+    for r in rows:
+        st = r.get("severityTotal") or {}
+        for s in STANDARD_SEVERITIES:
+            out[s] = out.get(s, 0) + int(st.get(s, 0))
+    return out
+
+
+def _merge_high_risk_by_team_rows(rows: list[dict[str, Any]]) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for r in rows:
+        for tid, n in (r.get("highRiskByTeam") or {}).items():
+            out[tid] = out.get(tid, 0) + int(n)
+    return out
+
+
 def _empty_dashboard(project_id: str = "") -> dict[str, Any]:
     es = _empty_severity_row()
     tm_labels = team_labels_from_config()
@@ -248,20 +333,97 @@ def _empty_dashboard(project_id: str = "") -> dict[str, Any]:
         "globalChartStackModules": {},
         "errors": [{"projectId": project_id or "_", "message": "no_data"}],
         "projectId": project_id or None,
+        "aggregateMode": "project_full",
     }
 
 
+async def _compute_dashboard_all_bhm(
+    labels_map: dict[str, str],
+    project_rows: list[dict[str, Any]],
+    dash_ttl: float,
+    now: float,
+) -> dict[str, Any]:
+    """전 프로젝트·OPEN·B·H·M만 순차 수집 후 요약 병합. componentKey 없으면 Sonar 미호출·0건."""
+    global _CACHE, _CACHE_TS, _DASH_CACHE_PROJECT
+
+    if (
+        _CACHE is not None
+        and _DASH_CACHE_PROJECT == _ALL_SCOPE_TOKEN
+        and (now - _CACHE_TS) < dash_ttl
+    ):
+        return _CACHE
+
+    errors: list[dict[str, str]] = []
+    rows_out: list[dict[str, Any]] = []
+    for row_cfg in project_rows:
+        res_pid, row_data, err = await _fetch_one_project_bhm(row_cfg, labels_map)
+        if err is not None:
+            errors.append({"projectId": res_pid, "message": err})
+        if row_data is None:
+            row_data = _build_by_project_row([], row_cfg, labels_map)
+        else:
+            row_data = _with_canonical_label(row_data, labels_map)
+        rows_out.append(row_data)
+
+    st_merged = _merge_severity_totals_from_rows(rows_out)
+    total = sum(st_merged.values())
+    hr_team = _merge_high_risk_by_team_rows(rows_out)
+    tm_labels = team_labels_from_config()
+    tm_order = team_display_order()
+    for tid in tm_order:
+        hr_team.setdefault(tid, 0)
+
+    out: dict[str, Any] = {
+        "summary": {
+            "totalIssues": total,
+            "severityTotal": st_merged,
+            "highRisk": _high_risk(st_merged),
+            "highRiskByTeam": hr_team,
+            "highRiskTeamLabels": tm_labels,
+            "highRiskTeamOrder": tm_order,
+        },
+        "byProject": rows_out,
+        "globalModules": {},
+        "globalChartStackModules": {},
+        "errors": errors,
+        "projectId": _ALL_SCOPE_TOKEN,
+        "aggregateMode": "all_bhm",
+    }
+
+    _CACHE = out
+    _CACHE_TS = now
+    _DASH_CACHE_PROJECT = _ALL_SCOPE_TOKEN
+    return out
+
+
 async def compute_dashboard_metrics(project_id: str | None = None) -> dict[str, Any]:
-    """단일 projectId 집계만 수행. Sonar는 해당 프로젝트(및 issues 페이징)만 순차 호출."""
+    """
+    대시보드 집계.
+
+    - `projectId=all`: `component_projects.json` 전체 행 기준 병합(키 없으면 0건). OPEN·B·H·M만 Sonar 호출.
+    - 그 외: 단일 프로젝트·OPEN 전 심각도(`fetch_all_issues`) — componentKey 있는 행만 `projects_with_keys()`.
+    """
     global _CACHE, _CACHE_TS, _DASH_CACHE_PROJECT
     now = time.time()
     dash_ttl = settings.metrics_dashboard_cache_ttl_seconds
 
     labels_map = project_labels_map()
-    projects_cfg = projects_with_keys()
-    valid_ids = {str(r.get("id") or "") for r in projects_cfg}
+    raw = _normalize_dashboard_project_id(project_id)
+    all_cfg_rows = _component_projects_rows()
+    valid_ids = {str(r.get("id") or "").strip() for r in all_cfg_rows}
     _prune_project_cache(valid_ids)
 
+    # ALL 은 projects_with_keys() 비어 있어도 진행 (키 없는 프로젝트는 0건). JSON 자체가 비었을 때만 빈 대시보드.
+    if raw.lower() == _ALL_SCOPE_TOKEN:
+        if not all_cfg_rows:
+            out = _empty_dashboard()
+            _CACHE = out
+            _CACHE_TS = now
+            _DASH_CACHE_PROJECT = None
+            return out
+        return await _compute_dashboard_all_bhm(labels_map, all_cfg_rows, dash_ttl, now)
+
+    projects_cfg = projects_with_keys()
     if not projects_cfg:
         out = _empty_dashboard()
         _CACHE = out
@@ -269,7 +431,7 @@ async def compute_dashboard_metrics(project_id: str | None = None) -> dict[str, 
         _DASH_CACHE_PROJECT = None
         return out
 
-    pid_req = str(project_id or "").strip() or str(projects_cfg[0].get("id") or "")
+    pid_req = raw or str(projects_cfg[0].get("id") or "")
     row_cfg = next((r for r in projects_cfg if str(r.get("id") or "") == pid_req), None)
     if row_cfg is None:
         out = _empty_dashboard(pid_req)
@@ -313,6 +475,7 @@ async def compute_dashboard_metrics(project_id: str | None = None) -> dict[str, 
         "globalChartStackModules": dict(row_data.get("chartStackModules") or {}),
         "errors": errors,
         "projectId": pid_req,
+        "aggregateMode": "project_full",
     }
 
     _CACHE = out

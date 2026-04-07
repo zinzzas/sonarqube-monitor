@@ -107,9 +107,36 @@ function teamHrColorsByCounts(order, teamCounts) {
   return out;
 }
 
+const ALL_SCOPE_ID = "all";
+
 const firstProjectId = COMPONENT_PROJECTS[0]?.id ?? "";
-/** 상단 차트·표 범위 — 기본 첫 프로젝트, 콤보 변경 시 해당 projectId로만 집계 API 호출 */
+/** 상단 차트·표 범위 — 기본 첫 프로젝트, `all`이면 전 프로젝트 B·H·M 병합 API */
 const scopeId = ref(firstProjectId);
+
+const projectSelectOptions = computed(() => [
+  { id: ALL_SCOPE_ID, label: "전체 (ALL)" },
+  ...COMPONENT_PROJECTS,
+]);
+
+const isAllScope = computed(
+  () => scopeId.value === ALL_SCOPE_ID || payload.value?.aggregateMode === "all_bhm",
+);
+
+const pieSeverityOptions = computed(() =>
+  isAllScope.value ? ["BLOCKER", "HIGH", "MEDIUM"] : SEVERITY_OPTIONS,
+);
+
+const kpiSeverityChips = computed(() =>
+  isAllScope.value ? ["BLOCKER", "HIGH", "MEDIUM"] : SEVERITY_OPTIONS,
+);
+
+const excelSeverityColumns = computed(() =>
+  isAllScope.value ? ["BLOCKER", "HIGH", "MEDIUM"] : SEVERITY_OPTIONS,
+);
+
+const excelSeveritySectionTitle = computed(() =>
+  isAllScope.value ? "전체 프로젝트 Severity (엑셀형 · B·H·M)" : "선택 프로젝트 Severity (엑셀형)",
+);
 
 function moduleTotal(modCounts) {
   if (!modCounts) return 0;
@@ -124,7 +151,7 @@ async function load() {
   try {
     timeoutId = window.setTimeout(() => controller.abort(), DASHBOARD_FETCH_TIMEOUT_MS);
     const qs = new URLSearchParams();
-    if (scopeId.value) qs.set("projectId", scopeId.value);
+    if (scopeId.value) qs.set("projectId", scopeId.value === ALL_SCOPE_ID ? "all" : scopeId.value);
     const dashUrl =
       qs.toString().length > 0
         ? `/api/metrics/dashboard?${qs}`
@@ -214,12 +241,30 @@ const mergedProjectRows = computed(() => {
   });
 });
 
-const activeProjectRow = computed(
-  () => mergedProjectRows.value.find((r) => r.projectId === scopeId.value) ?? null,
-);
+const activeProjectRow = computed(() => {
+  if (scopeId.value === ALL_SCOPE_ID) return null;
+  return mergedProjectRows.value.find((r) => r.projectId === scopeId.value) ?? null;
+});
 
-/** KPI·차트 — 선택 프로젝트 행(집계 API는 해당 프로젝트만 반환) */
+/** KPI·차트 — ALL은 API summary 병합, 단일 프로젝트는 해당 행 */
 const displaySummary = computed(() => {
+  if (scopeId.value === ALL_SCOPE_ID) {
+    const s = summary.value;
+    if (s) {
+      return {
+        totalIssues: s.totalIssues ?? 0,
+        highRisk: s.highRisk ?? 0,
+        severityTotal: { ...emptySevRow(), ...(s.severityTotal ?? {}) },
+        highRiskByTeam: { ...(s.highRiskByTeam ?? {}) },
+      };
+    }
+    return {
+      totalIssues: 0,
+      highRisk: 0,
+      severityTotal: emptySevRow(),
+      highRiskByTeam: {},
+    };
+  }
   const row = activeProjectRow.value;
   if (row && row.projectId === scopeId.value) {
     return {
@@ -291,7 +336,10 @@ const teamHrColors = computed(() =>
   teamHrColorsByCounts(highRiskTeamOrderSorted.value, displayHighRiskByTeam.value),
 );
 
-const scopeLabel = computed(() => activeProjectRow.value?.label ?? scopeId.value);
+const scopeLabel = computed(() => {
+  if (scopeId.value === ALL_SCOPE_ID) return "전체 (ALL)";
+  return activeProjectRow.value?.label ?? scopeId.value;
+});
 
 const severityForScope = computed(() => displaySummary.value?.severityTotal ?? null);
 
@@ -300,13 +348,15 @@ const chartStackMapForScope = computed(
   () => activeProjectRow.value?.chartStackModules ?? {},
 );
 
-/** 표·CSV — 현재 선택 프로젝트만 (다른 프로젝트는 콤보 선택 후 조회) */
-const visibleProjectRows = computed(() =>
-  mergedProjectRows.value.filter((r) => r.projectId === scopeId.value),
-);
+/** 표·CSV — ALL이면 전 프로젝트 행, 아니면 선택 한 줄 */
+const visibleProjectRows = computed(() => {
+  if (scopeId.value === ALL_SCOPE_ID) return mergedProjectRows.value;
+  return mergedProjectRows.value.filter((r) => r.projectId === scopeId.value);
+});
 
 watch(mergedProjectRows, (rows) => {
   if (!rows.length || !scopeId.value) return;
+  if (scopeId.value === ALL_SCOPE_ID) return;
   if (!rows.some((r) => r.projectId === scopeId.value)) {
     scopeId.value = COMPONENT_PROJECTS[0]?.id ?? rows[0].projectId;
   }
@@ -355,12 +405,13 @@ const pieChartData = computed(() => {
   if (!st) {
     return { labels: [], datasets: [] };
   }
+  const opts = pieSeverityOptions.value;
   return {
-    labels: SEVERITY_OPTIONS,
+    labels: opts,
     datasets: [
       {
-        backgroundColor: SEVERITY_OPTIONS.map((s) => SEV_COLORS[s] ?? "#94a3b8"),
-        data: SEVERITY_OPTIONS.map((s) => st[s] ?? 0),
+        backgroundColor: opts.map((s) => SEV_COLORS[s] ?? "#94a3b8"),
+        data: opts.map((s) => st[s] ?? 0),
       },
     ],
   };
@@ -558,8 +609,9 @@ function isPathTreeProject(proj) {
 
 /** 집계 반영 후 path_tree 프로젝트 트리 기본 펼침 (defaults.moduleTreeDefaultExpandDepth) */
 function buildDefaultExpandedFromMergedRows() {
-  const depth = getModuleTreeDefaultExpandDepth();
   const next = new Set();
+  if (scopeId.value === ALL_SCOPE_ID) return next;
+  const depth = getModuleTreeDefaultExpandDepth();
   const row = mergedProjectRows.value.find((r) => r.projectId === scopeId.value);
   if (!row || !isPathTreeProject(row)) return next;
   const s = buildDefaultExpandedModulePathSet(row.projectId, row.modules || {}, depth);
@@ -717,10 +769,21 @@ async function downloadModuleCsv() {
       </p>
     </div>
 
+    <div v-if="!loading && isAllScope && !err" class="dashboard-all-banner" role="note">
+      ALL: OPEN 이슈 중 <strong>BLOCKER·HIGH·MEDIUM</strong>만 집계합니다. (LOW·INFO 제외)
+    </div>
+
     <template v-if="!loading && displaySummary && !err">
       <section class="dash-summary" aria-label="요약">
         <div class="kpi">
-          <span class="kpi__label">프로젝트 이슈</span>
+          <span
+            class="kpi__label"
+            :class="{ 'kpi__label--long': isAllScope }"
+            >{{
+              isAllScope
+                ? "OPEN 이슈 (BLOCKER+HIGH+MEDIUM)"
+                : "프로젝트 이슈"
+            }}</span>
           <span class="kpi__value">{{ displaySummary.totalIssues.toLocaleString("ko-KR") }}</span>
         </div>
         <div
@@ -768,7 +831,12 @@ async function downloadModuleCsv() {
         <div class="kpi kpi--mini">
           <span class="kpi__label">Severity 합계</span>
           <div class="kpi__chips">
-            <span v-for="s in SEVERITY_OPTIONS" :key="s" class="sev-chip" :class="`sev-chip--${s.toLowerCase()}`">
+            <span
+              v-for="s in kpiSeverityChips"
+              :key="s"
+              class="sev-chip"
+              :class="`sev-chip--${s.toLowerCase()}`"
+            >
               {{ s }} {{ displaySummary.severityTotal[s] ?? 0 }}
             </span>
           </div>
@@ -779,7 +847,7 @@ async function downloadModuleCsv() {
         <label class="field dashboard-scope__field">
           <span class="dashboard-scope__label">프로젝트 (선택 시 집계)</span>
           <select v-model="scopeId" class="select dashboard-scope__select">
-            <option v-for="p in COMPONENT_PROJECTS" :key="p.id" :value="p.id">
+            <option v-for="p in projectSelectOptions" :key="p.id" :value="p.id">
               {{ p.label }}
             </option>
           </select>
@@ -791,7 +859,7 @@ async function downloadModuleCsv() {
           <div class="card__head">
             <div class="card__head-main">
               <h2 class="card__title">Severity 분포</h2>
-              <p class="card__subtitle">{{ scopeLabel }}</p>
+              <p class="card__subtitle">{{ scopeLabel }}{{ isAllScope ? " · B·H·M만" : "" }}</p>
             </div>
           </div>
           <div class="chart-box chart-box--pair">
@@ -799,7 +867,7 @@ async function downloadModuleCsv() {
             <p v-else class="chart-empty">데이터 없음</p>
           </div>
         </div>
-        <div class="card chart-card">
+        <div v-if="!isAllScope" class="card chart-card">
           <div class="card__head">
             <div class="card__head-main">
               <h2 class="card__title">Module × Severity (스택)</h2>
@@ -819,7 +887,9 @@ async function downloadModuleCsv() {
           <div class="card__head">
             <div class="card__head-main">
               <h2 class="card__title">팀별 High risk (BLOCKER+HIGH)</h2>
-              <p class="card__subtitle">{{ scopeLabel }} · 경로 모듈 토큰 기준 팀 매핑</p>
+              <p class="card__subtitle">
+                {{ scopeLabel }} · 경로 모듈 토큰 기준 팀 매핑{{ isAllScope ? " · OPEN · B·H·M 집계" : "" }}
+              </p>
             </div>
           </div>
           <div class="chart-box chart-box--pair">
@@ -833,9 +903,12 @@ async function downloadModuleCsv() {
         </div>
       </div>
 
-      <section class="card excel-block excel-block--severity dash-chart-last" aria-label="선택 프로젝트 집계">
+      <section
+        class="card excel-block excel-block--severity dash-chart-last"
+        :aria-label="isAllScope ? '전체 프로젝트 집계' : '선택 프로젝트 집계'"
+      >
         <div class="card__head">
-          <h2 class="card__title">선택 프로젝트 Severity (엑셀형)</h2>
+          <h2 class="card__title">{{ excelSeveritySectionTitle }}</h2>
         </div>
         <div class="excel-wrap">
           <table class="excel">
@@ -843,7 +916,7 @@ async function downloadModuleCsv() {
               <tr>
                 <th>프로젝트</th>
                 <th
-                  v-for="s in SEVERITY_OPTIONS"
+                  v-for="s in excelSeverityColumns"
                   :key="s"
                   :class="isRiskSeverity(s) ? 'excel__th--risk' : undefined"
                 >
@@ -857,7 +930,7 @@ async function downloadModuleCsv() {
               <tr v-for="row in visibleProjectRows" :key="row.projectId">
                 <td class="excel__name">{{ row.label }}</td>
                 <td
-                  v-for="s in SEVERITY_OPTIONS"
+                  v-for="s in excelSeverityColumns"
                   :key="s"
                   class="excel__num"
                   :class="{ 'excel__cell--risk': isRiskSeverity(s) }"
@@ -888,7 +961,11 @@ async function downloadModuleCsv() {
         </div>
       </section>
 
-      <section class="card excel-block excel-block--modules" aria-label="선택 프로젝트 Module × Severity">
+      <section
+        v-if="!isAllScope"
+        class="card excel-block excel-block--modules"
+        aria-label="선택 프로젝트 Module × Severity"
+      >
         <div class="card__head card__head--actions">
           <h2 class="card__title">선택 프로젝트 Module × Severity</h2>
           <button
