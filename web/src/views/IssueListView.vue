@@ -5,6 +5,7 @@ import { useComponentProjectSelect } from "../composables/useComponentProjectSel
 import { useIssueListApiTrigger } from "../composables/useIssueListApiTrigger.js";
 import { useSonarIssuesPaging } from "../composables/useSonarIssuesPaging.js";
 import { LOAD_MORE_CHEVRON_SRC } from "../loadingOverlay.js";
+import { issueMatchesTeamFilter } from "../lib/teamIdForIssue.js";
 import { issueComponentKey, issueMatchesModuleFilter } from "../module.js";
 import {
   SEVERITY_OPTIONS,
@@ -124,6 +125,12 @@ const moduleFilter = computed(() => {
   return typeof m === "string" && m ? m : "";
 });
 
+/** 대시보드 팀 칩 딥링크 — Sonar API 비지원, 클라이언트 필터 */
+const teamFilter = computed(() => {
+  const t = route.query.teamId;
+  return typeof t === "string" && t.trim() ? t.trim() : "";
+});
+
 const activeProjectId = computed(() => selectedProjectId.value || String(route.params.projectId || ""));
 
 /** 모듈 문자열이 있는데 한 건도 매칭되지 않음(프로필/경로 불일치 등) */
@@ -137,14 +144,19 @@ const moduleFilterMatchedNone = computed(() => {
   return n === 0;
 });
 
-/** 모듈 필터 적용 후 0건이면 로드된 원본을 그대로 표시(빈 표 방지) */
+/** 모듈 필터 적용 후 0건이면 로드된 원본을 그대로 표시(빈 표 방지). 팀 필터는 엄격 적용. */
 const displayedIssues = computed(() => {
   const m = moduleFilter.value;
-  const raw = issues.value;
-  if (!m) return raw;
+  const t = teamFilter.value;
   const pid = activeProjectId.value;
-  const filtered = raw.filter((row) => issueMatchesModuleFilter(row, pid, m));
-  if (filtered.length > 0) return filtered;
+  let raw = issues.value;
+  if (m) {
+    const filtered = raw.filter((row) => issueMatchesModuleFilter(row, pid, m));
+    raw = filtered.length > 0 ? filtered : raw;
+  }
+  if (t) {
+    raw = raw.filter((row) => issueMatchesTeamFilter(row, pid, t));
+  }
   return raw;
 });
 
@@ -214,12 +226,19 @@ const filterHint = computed(() => {
   const parts = [];
   const nav = route.query.nav;
   if (nav === "module-matrix") parts.push("진입: Module×Severity");
+  else if (nav === "kpi-high-risk") parts.push("진입: High risk KPI");
   else if (nav === "severity-excel") parts.push("진입: Severity 엑셀");
   if (moduleFilter.value) parts.push(`모듈: ${moduleFilter.value}`);
-  const sev = route.query.severity;
-  if (typeof sev === "string" && sev && SEVERITY_OPTIONS.includes(sev)) {
-    parts.push(`Severity: ${sev}`);
+  const sevMulti = route.query.severities;
+  if (typeof sevMulti === "string" && sevMulti.trim()) {
+    parts.push(`Severity: ${sevMulti}`);
+  } else {
+    const sev = route.query.severity;
+    if (typeof sev === "string" && sev && SEVERITY_OPTIONS.includes(sev)) {
+      parts.push(`Severity: ${sev}`);
+    }
   }
+  if (teamFilter.value) parts.push(`팀(경로 매칭): ${teamFilter.value}`);
   return parts.length ? parts.join(" · ") : "";
 });
 
@@ -245,8 +264,20 @@ const showModuleFallbackBanner = computed(
 
 /** projectId ↔ selectedProjectId 동기화는 `useComponentProjectSelect`에서 처리 */
 watch(
-  () => route.query.severity,
-  (sev) => {
+  () => [route.query.severities, route.query.severity],
+  () => {
+    const sevs = route.query.severities;
+    if (typeof sevs === "string" && sevs.trim()) {
+      const arr = sevs
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => SEVERITY_OPTIONS.includes(s));
+      if (arr.length) {
+        filterSeverities.value = arr;
+        return;
+      }
+    }
+    const sev = route.query.severity;
     if (typeof sev === "string" && sev && SEVERITY_OPTIONS.includes(sev)) {
       filterSeverities.value = [sev];
     } else {

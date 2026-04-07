@@ -241,11 +241,10 @@ onMounted(() => {
       <h1>High risk 팀 매칭</h1>
       <div class="admin-team-mapping__intro">
         <p class="hero__sub">
-          BLOCKER·HIGH 이슈를 어느 팀 칸에 넣을지 정하는 규칙입니다. 아래 표는 <strong>위에서 아래로</strong>만 보며
-          <strong>첫으로 맞는 한 줄</strong>만 적용되고, 없으면 맨 아래 <strong>fallback</strong>입니다.
+          BLOCKER·HIGH 이슈를 어느 개발팀으로 맵핑할지 정하는 규칙입니다. 아래 표는 <strong>개발팀과 시스템 약어를 맵핑</strong>하고 개발팀 기준으로 그룹핑 관리할 수 있고, 맵핑이 안될 경우 <strong>fallback</strong>으로 맵핑됩니다.
         </p>
         <p class="hero__sub">
-          <strong>modules</strong> — 경로에서 나온 이름(쉼표·공백 구분, 저장 시 소문자).
+          <strong>modules</strong> — 경로에서 나온 시스템 약어(쉼표·공백 구분, 저장 시 소문자).
           <strong>match</strong> — <code>first</code> 맨 앞 토큰만, <code>any</code> 경로 어디든 일치.
         </p>
       </div>

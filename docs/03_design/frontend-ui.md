@@ -13,12 +13,12 @@
 
 ## Dashboard — 프로젝트 범위
 
-| 콤보 | API `projectId` | 집계 |
-|------|-----------------|------|
-| **전체 (ALL)** | `all` | `component_projects.json` **전체 id** 기준 병합. `componentKey`가 비어 있으면 Sonar 호출 없이 0건. Sonar는 **OPEN** 중 **BLOCKER·HIGH·MEDIUM**(API: BLOCKER, CRITICAL, MAJOR)만 수집. |
-| 개별 프로젝트 | 해당 id | **OPEN** 전 심각도 — 백엔드는 `componentKey`가 있는 행만 Sonar 집계에 포함. |
+| UI | API `projectId` | 집계 |
+|----|-----------------|------|
+| **전체 (ALL)** 라디오 칩 | `all` | `component_projects.json` **전체 id** 기준 병합. `componentKey`가 비어 있으면 Sonar 호출 없이 0건. Sonar는 **OPEN** 중 **BLOCKER·HIGH·MEDIUM**(API: BLOCKER, CRITICAL, MAJOR)만 수집. |
+| 개별 프로젝트 칩 | 해당 id | **OPEN** 전 심각도 — 백엔드는 `componentKey`가 있는 행만 Sonar 집계에 포함. |
 
-**UI**: ALL 선택 시 상단 안내 배너, KPI 칩·파이·엑셀형 표는 **B·H·M**만 노출. Module×Severity 스택 차트와 모듈 상세 블록은 숨김(모듈은 프로젝트 단일 선택 시만).
+**UI**: 이슈 목록 **Filters**와 동일 패턴 — 좌측 `filter-title`(프로젝트), 우측 `chip-group` + `chk-chip` + **라디오**(단일 선택). ALL 선택 시 상단 안내 배너, KPI·파이·엑셀형은 **B·H·M**만. Module×Severity 스택·모듈 상세는 단일 프로젝트일 때만.
 
 **Why**: 단일 SPA, 백엔드가 `web/dist` 서빙 시 **딥링크**는 `index.html` 폴백 필요(구현은 `main.py`).
 
@@ -42,5 +42,6 @@
 
 ## See also
 
+- [대시보드 카운트 → 이슈 목록 딥링크 설계](./dashboard-issue-deep-links.md)
 - [../04_development/coding-guidelines.md](../04_development/coding-guidelines.md)
 - [../00_overview/architecture-summary.md](../00_overview/architecture-summary.md)

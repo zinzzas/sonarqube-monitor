@@ -48,6 +48,7 @@
 - [API 요구·목록](./02_analysis/api-requirements.md)
 - [시스템 설계](./03_design/system-architecture.md)
 - [프론트 UI·라우팅](./03_design/frontend-ui.md)
+- [대시보드 → 이슈 목록 딥링크 설계](./03_design/dashboard-issue-deep-links.md)
 - [모듈 세그먼트 라벨](./03_design/module-segment-labels.md)
 - [배포 가이드](./06_release/deployment-guide.md)
 - [대시보드 CSS 패턴](./04_development/web-dashboard-css.md)

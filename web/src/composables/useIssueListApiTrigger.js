@@ -24,6 +24,7 @@ export function useIssueListApiTrigger({
       projectId: route.params.projectId,
       ck: String(componentKeys.value || "").trim(),
       severityQ: String(route.query.severity ?? ""),
+      severitiesQ: String(route.query.severities ?? ""),
       sevKey: JSON.stringify([...(filterSeverities.value ?? [])].sort()),
       stKey: JSON.stringify([...(filterStatuses.value ?? [])].sort()),
       sort: sortBySeverity.value,

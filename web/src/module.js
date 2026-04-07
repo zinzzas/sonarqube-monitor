@@ -26,21 +26,22 @@ function norm(s) {
     .trim();
 }
 
-/** Sonar `component` 는 `projectKey:relative/path` — 백엔드 sonar_relative_path 와 동일 */
-function sonarRelativePath(component) {
-  let path = norm(component);
-  const i = path.indexOf(":");
-  if (i >= 0) path = path.slice(i + 1).replace(/^\//, "");
-  return path;
-}
-
-function profileForProject(projectId) {
+/** `module_grouping.json` 프로필 — 팀 매칭·모듈 추출과 동일 단일 출처 */
+export function profileForProject(projectId) {
   const defaultId = mg.defaultProfile ?? "vue_src_tree";
   const key =
     projectId && mg.projectProfiles?.[projectId] != null
       ? mg.projectProfiles[projectId]
       : defaultId;
   return mg.profiles?.[key] ?? mg.profiles?.[defaultId];
+}
+
+/** Sonar `projectKey:relative/path` → 상대 경로 (백엔드 `sonar_relative_path` 와 동일) */
+export function sonarRelativePath(component) {
+  let path = norm(component);
+  const i = path.indexOf(":");
+  if (i >= 0) path = path.slice(i + 1).replace(/^\//, "");
+  return path;
 }
 
 function looksLikeFile(seg) {

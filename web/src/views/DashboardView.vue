@@ -135,7 +135,7 @@ const excelSeverityColumns = computed(() =>
 );
 
 const excelSeveritySectionTitle = computed(() =>
-  isAllScope.value ? "전체 프로젝트 Severity (엑셀형 · B·H·M)" : "선택 프로젝트 Severity (엑셀형)",
+  isAllScope.value ? "전체 프로젝트 Severity (BLOCKER+HIGH+MEDIUM)" : "선택 프로젝트 Severity",
 );
 
 function moduleTotal(modCounts) {
@@ -330,6 +330,13 @@ const highRiskTeamOrderSorted = computed(() => {
 const showTeamHighRiskUi = computed(
   () => teamOrderFromSegmentLabels().length > 0 || highRiskTeamOrder.value.length > 0,
 );
+
+/** ALL 제외·componentKey 있는 프로젝트만 이슈 목록 딥링크 */
+const canDeepLinkToIssues = computed(() => {
+  if (isAllScope.value) return false;
+  const row = mergedProjectRows.value.find((r) => r.projectId === scopeId.value);
+  return Boolean(row && hasProjectKey(row));
+});
 
 /** KPI·막대 그래프 공통 — 팀 id → 순위 색 */
 const teamHrColors = computed(() =>
@@ -565,9 +572,25 @@ function goIssues(projectId, query = {}) {
   const q = {};
   if (query.module) q.module = query.module;
   if (query.severity) q.severity = query.severity;
+  if (Array.isArray(query.severities) && query.severities.length) {
+    q.severities = query.severities.join(",");
+  }
+  if (query.teamId) q.teamId = query.teamId;
   /** 이슈 목록에서 출처 구분(문서·필터 힌트용). API에는 전달하지 않음 */
-  q.nav = query.module ? "module-matrix" : "severity-excel";
+  if (q.module) q.nav = "module-matrix";
+  else if (q.severities) q.nav = "kpi-high-risk";
+  else q.nav = "severity-excel";
   router.push({ name: "issues", params: { projectId }, query: q });
+}
+
+function goIssuesHighRisk() {
+  if (!canDeepLinkToIssues.value) return;
+  goIssues(scopeId.value, { severities: ["BLOCKER", "HIGH"] });
+}
+
+function goIssuesTeam(teamId) {
+  if (!canDeepLinkToIssues.value) return;
+  goIssues(scopeId.value, { severities: ["BLOCKER", "HIGH"], teamId });
 }
 
 function projectRowTotal(row) {
@@ -791,7 +814,20 @@ async function downloadModuleCsv() {
           :class="{ 'kpi--risk-clear': displaySummary.highRisk === 0 }"
         >
           <span class="kpi__label">High risk (BLOCKER+HIGH)</span>
+          <button
+            v-if="canDeepLinkToIssues"
+            type="button"
+            class="kpi__value kpi__value--hr-total kpi__value--hr-link"
+            :class="{
+              'kpi__value--hr-total-zero': displaySummary.highRisk === 0,
+            }"
+            :title="'이슈 목록으로 이동 (OPEN · BLOCKER·HIGH)'"
+            @click="goIssuesHighRisk"
+          >
+            {{ displaySummary.highRisk.toLocaleString("ko-KR") }}
+          </button>
           <span
+            v-else
             class="kpi__value"
             :class="{
               'kpi__value--hr-total': true,
@@ -804,28 +840,40 @@ async function downloadModuleCsv() {
           >
             BLOCKER·HIGH OPEN 이슈 없음
           </p>
-          <p
-            v-else
-            class="kpi__hint kpi__hint--hr-alert"
+          <button
+            v-else-if="canDeepLinkToIssues"
+            type="button"
+            class="kpi__hint kpi__hint--hr-alert kpi__hint--link"
+            @click="goIssuesHighRisk"
           >
             BLOCKER·HIGH OPEN 이슈 있음
-          </p>
+          </button>
+          <p v-else class="kpi__hint kpi__hint--hr-alert">BLOCKER·HIGH OPEN 이슈 있음</p>
           <div
             v-if="showTeamHighRiskUi"
             class="kpi__team-row"
             aria-label="팀별 High risk 건수"
           >
-            <span
+            <button
               v-for="tid in highRiskTeamOrderSorted"
               :key="tid"
+              type="button"
               class="kpi__team-chip"
+              :class="{ 'kpi__team-chip--muted': !canDeepLinkToIssues }"
+              :disabled="!canDeepLinkToIssues"
               :style="{ color: teamHrColors[tid] }"
+              :title="
+                canDeepLinkToIssues
+                  ? '이슈 목록으로 이동 (OPEN · BLOCKER·HIGH · 팀 필터)'
+                  : '전체(ALL) 또는 componentKey 없음 — 개별 프로젝트 선택 시 이동 가능'
+              "
+              @click="goIssuesTeam(tid)"
             >
               <span class="kpi__team-name">{{ highRiskTeamLabels[tid] ?? tid }}</span>
               <strong class="kpi__team-num">{{
                 (displayHighRiskByTeam[tid] ?? 0).toLocaleString("ko-KR")
               }}</strong>
-            </span>
+            </button>
           </div>
         </div>
         <div class="kpi kpi--mini">
@@ -843,15 +891,35 @@ async function downloadModuleCsv() {
         </div>
       </section>
 
-      <div class="dashboard-scope" role="group" aria-label="차트 범위">
-        <label class="field dashboard-scope__field">
-          <span class="dashboard-scope__label">프로젝트 (선택 시 집계)</span>
-          <select v-model="scopeId" class="select dashboard-scope__select">
-            <option v-for="p in projectSelectOptions" :key="p.id" :value="p.id">
-              {{ p.label }}
-            </option>
-          </select>
-        </label>
+      <div
+        class="dashboard-scope dashboard-scope--filters"
+        role="region"
+        aria-labelledby="dashboard-scope-title"
+      >
+        <div class="filter-grid-row filter-grid-row--dashboard-scope">
+          <span id="dashboard-scope-title" class="filter-title filter-title--target">프로젝트</span>
+          <div class="filter-grid-row__main">
+            <div
+              class="chip-group chip-group--dashboard-scope"
+              role="radiogroup"
+              aria-label="집계 범위(단일 선택)"
+            >
+              <label
+                v-for="p in projectSelectOptions"
+                :key="p.id"
+                class="chk-chip"
+              >
+                <input
+                  v-model="scopeId"
+                  type="radio"
+                  name="dashboard-project-scope"
+                  :value="p.id"
+                />
+                <span class="chk-chip__face">{{ p.label }}</span>
+              </label>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="dash-charts dash-charts--triple">
