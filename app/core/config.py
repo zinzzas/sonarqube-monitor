@@ -59,6 +59,12 @@ class Settings(BaseSettings):
     metrics_sonar_max_concurrent: int = 4
     """예약: 현재 집계는 프로젝트·페이지 순차 처리만 사용. 병렬 확장 시 상한으로 쓸 수 있음."""
 
+    admin_team_mapping_token: str = ""
+    """
+    비우면 `/api/admin/team-mapping` GET·PUT 인증 없음(로컬 전용).
+    설정 시 `Authorization: Bearer <값>` 필수.
+    """
+
     sonar_http_connect_timeout_seconds: float = Field(default=15.0, ge=1.0, le=300.0)
     """httpx 연결 타임아웃. Sonar가 응답 없이 붙잡을 때 빠르게 실패."""
     sonar_http_read_timeout_seconds: float = Field(default=120.0, ge=5.0, le=600.0)

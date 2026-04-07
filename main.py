@@ -30,14 +30,21 @@ app.add_middleware(
 )
 app.add_middleware(InternalApiLogMiddleware)
 
-app.include_router(api_router, prefix="/api")
+# 1) `/api/*` 전용 앱 — 아래 SPA 라우트와 겹치지 않음 (PUT 등 405 방지).
+api_app = FastAPI()
 
 
-@app.get("/api/health")
-def health() -> dict[str, str]:
+@api_app.get("/health")
+def api_health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+api_app.include_router(api_router)
+app.mount("/api", api_app)
+
+# 2) SPA: Starlette `StaticFiles(html=True)` 는 깊은 경로(`/admin/...`)에서 루트 `index.html`로
+# 폴백하지 않고 404만 낸다. 따라서 정적 자산은 `/assets`만 마운트하고, 나머지 GET 은
+# `dist` 내 실제 파일이 있으면 그대로, 없으면 `index.html`(클라이언트 라우터)로 보낸다.
 _root = Path(__file__).resolve().parent
 _dist = _root / "web" / "dist"
 if _dist.is_dir():
@@ -51,7 +58,6 @@ if _dist.is_dir():
 
     @app.get("/{full_path:path}")
     async def spa_client(full_path: str) -> FileResponse:
-        # `/api/*` 는 위의 API 라우터가 처리해야 함. 여기까지 오면 미등록 경로.
         if full_path.startswith("api"):
             raise HTTPException(status_code=404, detail="Not Found")
         candidate = (_dist / full_path).resolve()

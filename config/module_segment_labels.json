@@ -1,25 +1,53 @@
 {
   "version": 1,
   "teamMapping": {
-    "_note": "HIGH RISK(BLOCKER+HIGH)만 팀 버킷 집계. java_tree·vue_src_tree 동일 규칙. 첫 매칭만 적용.",
     "precedence": [
       {
-        "teamId": "team_b",
-        "label": "B팀",
-        "when": { "firstSegment": ["atm"] }
-      },
-      {
-        "teamId": "team_c",
-        "label": "C팀",
-        "when": { "anySegment": ["external"] }
-      },
-      {
         "teamId": "team_a",
-        "label": "A팀",
-        "when": { "anySegment": ["common", "domain"] }
+        "label": "개발1팀",
+        "when": {
+          "modules": [
+            "atm"
+          ],
+          "match": "any"
+        }
+      },
+      {
+        "teamId": "team_2",
+        "label": "개발2팀",
+        "when": {
+          "modules": [
+            "external"
+          ],
+          "match": "any"
+        }
+      },
+      {
+        "teamId": "team_3",
+        "label": "개발3팀",
+        "when": {
+          "modules": [
+            "domain"
+          ],
+          "match": "any"
+        }
+      },
+      {
+        "teamId": "team_4",
+        "label": "공통",
+        "when": {
+          "modules": [
+            "common"
+          ],
+          "match": "any"
+        }
       }
     ],
-    "fallback": { "teamId": "shared", "label": "공통" }
+    "fallback": {
+      "teamId": "shared",
+      "label": "ETC"
+    },
+    "_note": "HIGH RISK(BLOCKER+HIGH)만 팀 버킷 집계. 첫 매칭만 적용. path_tree 에서 anchor(/fims/ 등)가 경로에 없으면 strip 이후 전체 경로 토큰으로도 매칭(깊이 제한 완화)."
   },
   "maps": {
     "java_tree": {
@@ -40,9 +68,15 @@
         "portal": {
           "label": "포털",
           "children": {
-            "common": { "label": "공통" },
-            "domain": { "label": "업무영역" },
-            "external": { "label": "외부 연동" }
+            "common": {
+              "label": "공통"
+            },
+            "domain": {
+              "label": "업무영역"
+            },
+            "external": {
+              "label": "외부 연동"
+            }
           }
         },
         "atm": {
@@ -72,16 +106,30 @@
         ]
       },
       "tree": {
-        "views": { "label": "뷰" },
-        "components": { "label": "컴포넌트" },
-        "router": { "label": "라우터" },
-        "assets": { "label": "에셋" },
+        "views": {
+          "label": "뷰"
+        },
+        "components": {
+          "label": "컴포넌트"
+        },
+        "router": {
+          "label": "라우터"
+        },
+        "assets": {
+          "label": "에셋"
+        },
         "api": {
           "label": "API",
           "children": {
-            "common": { "label": "공통" },
-            "domain": { "label": "업무영역" },
-            "external": { "label": "외부 연동" }
+            "common": {
+              "label": "공통"
+            },
+            "domain": {
+              "label": "업무영역"
+            },
+            "external": {
+              "label": "외부 연동"
+            }
           }
         }
       }

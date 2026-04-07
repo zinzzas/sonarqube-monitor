@@ -121,6 +121,39 @@ def path_tree_segments(component: str | None, profile: dict[str, Any]) -> list[s
     return parts
 
 
+def strip_only_path_segments(
+    component: str | None,
+    profile: dict[str, Any],
+    *,
+    max_depth_override: int | None = None,
+) -> list[str]:
+    """
+    anchor 없이 stripPrefixes만 적용한 경로의 디렉터리 세그먼트.
+
+    `path_tree`에서 anchorAfter(예: /fims/)가 경로에 없어 rollup 이 None이 될 때,
+    팀 매칭이 전부 fallback(ETC)으로 가지 않도록 토큰을 얻는 용도.
+    max_depth_override 가 있으면 프로필 maxDepth 대신 사용(깊은 경로의 토큰까지 검사).
+    """
+    path = sonar_relative_path(component)
+    if not path:
+        return []
+    rest = _strip_prefixes_path(path, profile)
+    if not rest:
+        return []
+    parts = [x for x in rest.split("/") if x]
+    parts = _drop_leading_src_segments(parts)
+    while parts and _looks_like_file(parts[-1]):
+        parts = parts[:-1]
+    if not parts:
+        return []
+    if max_depth_override is not None:
+        md = max(1, int(max_depth_override))
+    else:
+        md = int(profile.get("maxDepth") or 8)
+    parts = parts[:md]
+    return parts
+
+
 def path_tree_cumulative_keys(component: str | None, profile: dict[str, Any]) -> list[str]:
     """
     이슈가 기여하는 경로 노드 키 (롤업).

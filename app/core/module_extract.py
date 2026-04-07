@@ -99,20 +99,53 @@ def module_strategy_for_project(project_id: str | None) -> str:
     return str(profile.get("strategy") or "split_after")
 
 
-def extract_module(component: str | None, project_id: str | None = None) -> str:
+def _looks_like_file(seg: str) -> bool:
+    if not seg or "." not in seg:
+        return False
+    if "/" in seg:
+        return False
+    base = seg.rsplit(".", 1)[0]
+    return bool(base)
+
+
+def split_after_path_segments(component: str | None, profile: dict[str, Any]) -> list[str]:
+    """
+    split_after 프로필에서 `after` 앵커 이후 경로의 디렉터리 세그먼트 전부(파일명 제외).
+    extract_module 이 unknown 일 때도 팀 매칭(any/first)에 쓸 토큰을 얻기 위함.
+    """
+    path = sonar_relative_path(component)
+    if not path:
+        return []
+    after = str(profile.get("after") or "/fims/")
+    idx = path.find(after)
+    if idx < 0:
+        return []
+    rest = path[idx + len(after) :].lstrip("/")
+    parts = [p for p in rest.replace("\\", "/").split("/") if p]
+    while parts and _looks_like_file(parts[-1]):
+        parts = parts[:-1]
+    return parts[:32]
+
+
+def extract_module(
+    component: str | None,
+    project_id: str | None = None,
+    *,
+    profile: dict[str, Any] | None = None,
+) -> str:
     path = sonar_relative_path(component)
     if not path:
         return "unknown"
 
-    profile = _profile_for_project(project_id)
-    strategy = str(profile.get("strategy") or "split_after")
+    prof = profile if profile is not None else _profile_for_project(project_id)
+    strategy = str(prof.get("strategy") or "split_after")
 
     if strategy == "path_tree":
-        return path_tree_leaf_key(component, profile)
+        return path_tree_leaf_key(component, prof)
 
     if strategy == "split_after":
-        after = str(profile.get("after") or "/fims/")
-        seg_idx = int(profile.get("segment_index") or 0)
+        after = str(prof.get("after") or "/fims/")
+        seg_idx = int(prof.get("segment_index") or 0)
         idx = path.find(after)
         if idx < 0:
             return "unknown"

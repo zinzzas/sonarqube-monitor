@@ -8,7 +8,7 @@ import {
   LinearScale,
   Tooltip,
 } from "chart.js";
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { Bar, Pie } from "vue-chartjs";
 import { useRouter } from "vue-router";
 import { COMPONENT_PROJECTS } from "../config/componentProjects.js";
@@ -20,10 +20,12 @@ import {
 } from "../config/moduleGrouping.js";
 import { profileIdForProject } from "../config/moduleGrouping.js";
 import { chartStackAxisLabel, tableModuleKo } from "../lib/moduleSegmentLabels.js";
+import { TEAM_MAPPING_UPDATED_EVENT } from "../lib/teamMappingEvents.js";
 import {
   teamLabelsFromSegmentLabels,
   teamOrderFromSegmentLabels,
 } from "../lib/teamMappingConfig.js";
+import dashboardGearIcon from "../assets/dashboard-gear.svg?url";
 import { LOAD_MORE_CHEVRON_SRC } from "../loadingOverlay.js";
 import { buildDefaultExpandedModulePathSet, visibleModuleTreeRows } from "../moduleTree.js";
 import { SEVERITY_OPTIONS } from "../severity.js";
@@ -318,6 +320,18 @@ watch(
   { immediate: true },
 );
 
+function onTeamMappingConfigUpdated() {
+  load();
+}
+
+onMounted(() => {
+  window.addEventListener(TEAM_MAPPING_UPDATED_EVENT, onTeamMappingConfigUpdated);
+});
+
+onUnmounted(() => {
+  window.removeEventListener(TEAM_MAPPING_UPDATED_EVENT, onTeamMappingConfigUpdated);
+});
+
 const chartStackLabels = computed(() => {
   const m = chartStackMapForScope.value;
   const keys = Object.keys(m || {});
@@ -589,26 +603,6 @@ function triggerCsvDownload(lines, filenamePrefix) {
   URL.revokeObjectURL(a.href);
 }
 
-function downloadSeverityCsv() {
-  const rows = visibleProjectRows.value;
-  const lines = [];
-  lines.push("프로젝트별 Severity (엑셀형)");
-  lines.push(["프로젝트", ...SEVERITY_OPTIONS, "TOTAL", "High risk"].map(csvEscape).join(","));
-  for (const row of rows) {
-    lines.push(
-      [
-        row.label,
-        ...SEVERITY_OPTIONS.map((s) => row.severityTotal[s] ?? 0),
-        projectRowTotal(row),
-        row.highRisk ?? 0,
-      ]
-        .map(csvEscape)
-        .join(","),
-    );
-  }
-  triggerCsvDownload(lines, "sonarqube-severity");
-}
-
 async function downloadModuleCsv() {
   if (exportingModuleCsv.value) return;
   exportingModuleCsv.value = true;
@@ -690,7 +684,20 @@ async function downloadModuleCsv() {
           <time class="dashboard-asof__time" :datetime="snapshotAsOfIso">{{ snapshotAsOfLabel }}</time>
         </p>
       </div>
-      <div class="dashboard__toolbar-right">
+      <div class="dashboard__toolbar-right dashboard__toolbar-right--with-gear">
+        <router-link
+          class="dashboard-toolbar-gear"
+          :to="{ name: 'adminTeamMapping' }"
+          title="표준서비스 팀 매칭"
+        >
+          <img
+            :src="dashboardGearIcon"
+            alt="표준서비스 팀 매칭"
+            width="22"
+            height="22"
+            decoding="async"
+          />
+        </router-link>
         <button
           class="btn btn--dashboard-refresh"
           type="button"
@@ -797,7 +804,7 @@ async function downloadModuleCsv() {
           <div class="card__head">
             <div class="card__head-main">
               <h2 class="card__title">팀별 High risk (BLOCKER+HIGH)</h2>
-              <p class="card__subtitle">{{ scopeLabel }} · 경로 세그먼트 기준 팀 매핑</p>
+              <p class="card__subtitle">{{ scopeLabel }} · 경로 모듈 토큰 기준 팀 매핑</p>
             </div>
           </div>
           <div class="chart-box chart-box--pair">
@@ -812,16 +819,8 @@ async function downloadModuleCsv() {
       </div>
 
       <section class="card excel-block excel-block--severity dash-chart-last" aria-label="선택 프로젝트 집계">
-        <div class="card__head card__head--actions">
+        <div class="card__head">
           <h2 class="card__title">선택 프로젝트 Severity (엑셀형)</h2>
-          <button
-            type="button"
-            class="btn btn--secondary btn--head"
-            :disabled="loading || !displaySummary"
-            @click="downloadSeverityCsv"
-          >
-            엑셀 다운로드 (CSV)
-          </button>
         </div>
         <div class="excel-wrap">
           <table class="excel">

@@ -37,6 +37,21 @@ _DASH_CACHE_PROJECT: str | None = None
 _PROJECT_CACHE: dict[str, tuple[float, dict[str, Any], list[dict[str, Any]]]] = {}
 
 
+def invalidate_dashboard_cache() -> None:
+    """
+    `module_segment_labels.json` 의 teamMapping 저장 직후 호출.
+
+    - 조합된 대시보드 응답 캐시(`_CACHE`) 제거 → summary의 팀 라벨·순서가 파일 기준으로 다시 채워짐.
+    - 프로젝트별 이슈·집계 캐시(`_PROJECT_CACHE`) 제거 → `highRiskByTeam` 이 새 매칭 규칙으로 다시 계산됨
+      (캐시된 행만 갱신하면 규칙 변경 시 버킷 건수가 어긋날 수 있음).
+    """
+    global _CACHE, _CACHE_TS, _DASH_CACHE_PROJECT
+    _CACHE = None
+    _CACHE_TS = 0.0
+    _DASH_CACHE_PROJECT = None
+    _PROJECT_CACHE.clear()
+
+
 def _severity_key(raw: str | None) -> str:
     if not raw:
         return "INFO"

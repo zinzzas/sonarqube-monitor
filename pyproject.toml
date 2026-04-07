@@ -23,3 +23,5 @@ packages = ["app"]
 start = "python main.py"
 # 리로드 없이 고정 실행
 serve = "uvicorn main:app --host 127.0.0.1 --port 9999"
+# 관리 API·JSON 저장 검증: hatch run test
+test = "python -m unittest discover -s tests -p 'test_*.py' -v"

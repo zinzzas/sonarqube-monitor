@@ -4,8 +4,15 @@ from __future__ import annotations
 from typing import Any
 
 from app.config.load_module_segment_labels import team_mapping_config
-from app.core.module_extract import extract_module, profile_for_project
-from app.core.module_path_tree import path_tree_segments
+from app.core.module_extract import (
+    extract_module,
+    profile_for_project,
+    split_after_path_segments,
+)
+from app.core.module_path_tree import path_tree_segments, strip_only_path_segments
+
+# 팀 매칭 fallback 시 경로 깊이(anchor 미매칭·split_after unknown 등) — 프로필 maxDepth(예: 2)보다 넓게 토큰 검사
+_TEAM_MATCH_MAX_DEPTH = 32
 
 
 def _norm_seg(s: str) -> str:
@@ -17,11 +24,33 @@ def _path_segments_for_issue(component: str | None, project_id: str | None) -> l
     profile = profile_for_project(project_id)
     strategy = str(profile.get("strategy") or "split_after")
     if strategy == "path_tree":
-        return path_tree_segments(component, profile)
-    mod = extract_module(component, project_id)
-    if not mod or mod == "unknown":
-        return []
-    return [mod]
+        segs = path_tree_segments(component, profile)
+        if segs:
+            return segs
+        # anchorAfter(예: /fims/) 가 경로에 없으면 rollup 이 비어 전부 ETC 가 되는 것을 방지
+        return strip_only_path_segments(
+            component, profile, max_depth_override=_TEAM_MATCH_MAX_DEPTH
+        )
+    mod = extract_module(component, project_id, profile=profile)
+    if mod and mod != "unknown":
+        return [mod]
+    after_segs = split_after_path_segments(component, profile)
+    if after_segs:
+        return after_segs
+    return strip_only_path_segments(
+        component, profile, max_depth_override=_TEAM_MATCH_MAX_DEPTH
+    )
+
+
+def _when_str_list(when: dict[str, Any], key: str, legacy_key: str) -> list[Any]:
+    v = when.get(key)
+    if v is None:
+        v = when.get(legacy_key)
+    return v if isinstance(v, list) else []
+
+
+def _norm_module_list(raw: list[Any]) -> list[str]:
+    return [_norm_seg(x) for x in raw if x]
 
 
 def _match_when(segments: list[str], when: dict[str, Any]) -> bool:
@@ -30,8 +59,22 @@ def _match_when(segments: list[str], when: dict[str, Any]) -> bool:
     seg_l = [_norm_seg(s) for s in segments if s]
     if not seg_l:
         return False
-    fs = [_norm_seg(x) for x in (when.get("firstSegment") or []) if x]
-    anys = [_norm_seg(x) for x in (when.get("anySegment") or []) if x]
+
+    # 신규: { "modules": [...], "match": "first"|"any" }
+    if "modules" in when and isinstance(when.get("modules"), list):
+        mods = _norm_module_list(when["modules"])
+        mk = str(when.get("match") or "").strip().lower()
+        if mods and mk == "first":
+            return seg_l[0] in mods
+        if mods and mk == "any":
+            return any(s in mods for s in seg_l)
+        if mods:
+            return False
+        # modules 가 비어 있으면 아래 구형 키로 폴백
+
+    # 구형: firstModule/anyModule 또는 firstSegment/anySegment (둘 다 있으면 OR)
+    fs = _norm_module_list(_when_str_list(when, "firstModule", "firstSegment"))
+    anys = _norm_module_list(_when_str_list(when, "anyModule", "anySegment"))
     if fs and not anys:
         return seg_l[0] in fs
     if anys and not fs:
@@ -53,8 +96,8 @@ def team_id_for_path_segments(segments: list[str], mapping: dict[str, Any] | Non
             if not isinstance(row, dict):
                 continue
             tid = str(row.get("teamId") or "").strip()
-            when = row.get("when")
-            if tid and isinstance(when, dict) and _match_when(segments, when):
+            w = row.get("when")
+            if tid and isinstance(w, dict) and _match_when(segments, w):
                 return tid
     fb = cfg.get("fallback")
     if isinstance(fb, dict):
