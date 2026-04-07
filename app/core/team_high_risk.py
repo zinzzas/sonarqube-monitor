@@ -9,7 +9,7 @@ from app.core.module_extract import (
     profile_for_project,
     split_after_path_segments,
 )
-from app.core.module_path_tree import path_tree_segments, strip_only_path_segments
+from app.core.module_path_tree import path_tree_segments, sonar_relative_path, strip_only_path_segments
 
 # 팀 매칭 fallback 시 경로 깊이(anchor 미매칭·split_after unknown 등) — 프로필 maxDepth(예: 2)보다 넓게 토큰 검사
 _TEAM_MATCH_MAX_DEPTH = 32
@@ -19,15 +19,50 @@ def _norm_seg(s: str) -> str:
     return str(s or "").strip().lower()
 
 
+def _split_after_anchor_missing_in_path(component: str | None, profile: dict[str, Any]) -> bool:
+    """split_after 의 `after`(기본 /fims/) 가 component 경로에 없으면 True — strip 폴백 금지 판단용."""
+    path = sonar_relative_path(component)
+    if not path:
+        return False
+    after = str(profile.get("after") or "/fims/")
+    return path.find(after) < 0
+
+
 def _path_segments_for_issue(component: str | None, project_id: str | None) -> list[str]:
-    """path_tree / split_after 모두 지원. 모듈 exclude 와 무관하게 경로만 사용."""
+    """
+    path_tree / split_after 모두 지원. 모듈 exclude 와 무관하게 경로만 사용.
+
+    **path_tree**
+    - `anchorAfter` 가 비어 있지 않으면: `path_tree_segments`만 사용(= strip 후 **첫** anchor 이후 경로만).
+      앵커가 없으면 빈 리스트 — strip 전체만으로는 팀 토큰을 만들지 않음(Java 패키지 com 등 오매칭 방지).
+    - `anchorAfter` 가 비어 있으면(vue_src_tree 등): 위가 비면 strip_only 폴백.
+
+    **split_after**
+    - `extract_module` 이 알려진 모듈이면 그 1토큰.
+    - 그렇지 않으면 `after` 이후 세그먼트 목록.
+    - 그것도 비고 경로에 `after` 가 아예 없으면 빈 리스트 — strip_only 폴백 없음.
+    """
     profile = profile_for_project(project_id)
     strategy = str(profile.get("strategy") or "split_after")
     if strategy == "path_tree":
         segs = path_tree_segments(component, profile)
         if segs:
             return segs
-        # anchorAfter(예: /fims/) 가 경로에 없으면 rollup 이 비어 전부 ETC 가 되는 것을 방지
+        anchor = str(profile.get("anchorAfter") or "").strip()
+        if anchor:
+            return []
+        return strip_only_path_segments(
+            component, profile, max_depth_override=_TEAM_MATCH_MAX_DEPTH
+        )
+    if strategy == "split_after":
+        mod = extract_module(component, project_id, profile=profile)
+        if mod and mod != "unknown":
+            return [mod]
+        after_segs = split_after_path_segments(component, profile)
+        if after_segs:
+            return after_segs
+        if _split_after_anchor_missing_in_path(component, profile):
+            return []
         return strip_only_path_segments(
             component, profile, max_depth_override=_TEAM_MATCH_MAX_DEPTH
         )
@@ -40,6 +75,11 @@ def _path_segments_for_issue(component: str | None, project_id: str | None) -> l
     return strip_only_path_segments(
         component, profile, max_depth_override=_TEAM_MATCH_MAX_DEPTH
     )
+
+
+def path_segments_for_team_match(component: str | None, project_id: str | None) -> list[str]:
+    """이슈 component → 팀 매칭에 쓰는 경로 세그먼트(테스트·대시보드 디버그용)."""
+    return _path_segments_for_issue(component, project_id)
 
 
 def _when_str_list(when: dict[str, Any], key: str, legacy_key: str) -> list[Any]:
