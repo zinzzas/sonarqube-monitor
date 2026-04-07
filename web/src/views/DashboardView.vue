@@ -18,8 +18,10 @@ import {
   getModuleTreeDefaultExpandDepth,
   getProfileForProject,
 } from "../config/moduleGrouping.js";
-import { profileIdForProject } from "../config/moduleGrouping.js";
-import { chartStackAxisLabel, tableModuleKo } from "../lib/moduleSegmentLabels.js";
+import {
+  isTreeLabelsEnabledForProject,
+  tableModuleKo,
+} from "../lib/moduleSegmentLabels.js";
 import { TEAM_MAPPING_UPDATED_EVENT } from "../lib/teamMappingEvents.js";
 import {
   teamLabelsFromSegmentLabels,
@@ -60,6 +62,68 @@ const SEV_COLORS = {
 const CHART_CHROME = {
   axis: "#64748b",
   grid: "rgba(5, 150, 105, 0.11)",
+};
+
+/**
+ * Severity 스택 막대 범례 — 막대 기준.
+ * `pointStyleWidth` 를 쓰지 않음: Chart.js 가 ellipse 로 그려 파이와 크기·형태가 어긋날 수 있음.
+ */
+const SEVERITY_CHART_LEGEND = {
+  position: "bottom",
+  align: "center",
+  labels: {
+    color: CHART_CHROME.axis,
+    padding: 5,
+    usePointStyle: true,
+    pointStyle: "circle",
+    boxWidth: 10,
+    boxHeight: 10,
+    font: {
+      size: 12,
+    },
+  },
+};
+
+/** 파이 차트: Doughnut 기본 범례는 슬라이스 borderWidth 가 선으로 들어가 막대보다 커 보임 → 막대와 동일 톤으로 정규화 */
+function generateSeverityPieLegendLabels(chart) {
+  const data = chart.data;
+  const lbl = chart.legend.options.labels;
+  const colorOpt = lbl.color;
+  const fontColor =
+    typeof colorOpt === "function" ? colorOpt({ chart }) : colorOpt;
+  if (!data?.labels?.length || !data.datasets?.length) return [];
+  return data.labels.map((label, i) => {
+    const meta = chart.getDatasetMeta(0);
+    const style = meta.controller.getStyle(i);
+    const fill = style.backgroundColor;
+    return {
+      text: label,
+      fillStyle: fill,
+      fontColor,
+      hidden: !chart.getDataVisibility(i),
+      pointStyle: lbl.pointStyle ?? "circle",
+      lineWidth: 0,
+      strokeStyle: fill,
+      index: i,
+    };
+  });
+}
+
+const PIE_SEVERITY_LEGEND = {
+  ...SEVERITY_CHART_LEGEND,
+  onClick(_e, legendItem, legend) {
+    legend.chart.toggleDataVisibility(legendItem.index);
+    legend.chart.update();
+  },
+  labels: {
+    ...SEVERITY_CHART_LEGEND.labels,
+    generateLabels: generateSeverityPieLegendLabels,
+  },
+};
+
+/** 파이·스택 막대 — 캔버스 안쪽 여백 통일 */
+const CHART_LAYOUT_PAD = {
+  padding: { top: 8, bottom: 6, left: 4, right: 4 },
 };
 
 /**
@@ -361,6 +425,15 @@ const visibleProjectRows = computed(() => {
   return mergedProjectRows.value.filter((r) => r.projectId === scopeId.value);
 });
 
+/** `treeEnabled !== false` 인 프로젝트만 Module 표에 `업무명` 열 표시 */
+const showModuleKoColumnByProjectId = computed(() => {
+  const out = Object.create(null);
+  for (const r of visibleProjectRows.value) {
+    out[r.projectId] = isTreeLabelsEnabledForProject(r.projectId);
+  }
+  return out;
+});
+
 watch(mergedProjectRows, (rows) => {
   if (!rows.length || !scopeId.value) return;
   if (scopeId.value === ALL_SCOPE_ID) return;
@@ -400,9 +473,11 @@ const chartStackLabels = computed(() => {
   });
 });
 
-const stackChartSubtitle = computed(
-  () => " · 스택 축: 프로필 chartStackAnchorAfter(없으면 anchorAfter) 직후 첫 경로 세그먼트",
-);
+/** Severity 파이·스택 카드 부제 공통 줄 (프로젝트명 / ALL 시 B·H·M) */
+const chartCardScopeLine = computed(() => {
+  if (scopeId.value === ALL_SCOPE_ID) return `${scopeLabel.value} · B·H·M만`;
+  return scopeLabel.value;
+});
 
 /** 트리 표 안내용 (defaults.moduleTreeDefaultExpandDepth) */
 const moduleTreeDefaultExpandLabel = computed(() => getModuleTreeDefaultExpandDepth());
@@ -418,6 +493,7 @@ const pieChartData = computed(() => {
     datasets: [
       {
         backgroundColor: opts.map((s) => SEV_COLORS[s] ?? "#94a3b8"),
+        borderWidth: 0,
         data: opts.map((s) => st[s] ?? 0),
       },
     ],
@@ -427,15 +503,9 @@ const pieChartData = computed(() => {
 const pieOptions = {
   responsive: true,
   maintainAspectRatio: false,
+  layout: CHART_LAYOUT_PAD,
   plugins: {
-    legend: {
-      position: "bottom",
-      labels: {
-        color: CHART_CHROME.axis,
-        padding: 14,
-        usePointStyle: true,
-      },
-    },
+    legend: PIE_SEVERITY_LEGEND,
     tooltip: {
       bodyColor: "#334155",
       titleColor: "#334155",
@@ -449,13 +519,13 @@ const pieOptions = {
 const stackedBarData = computed(() => {
   const gm = chartStackMapForScope.value;
   const keys = chartStackLabels.value;
-  const profileId = profileIdForProject(scopeId.value);
   return {
-    labels: keys.map((key) => chartStackAxisLabel(profileId, key)),
+    labels: keys,
     datasets: SEVERITY_OPTIONS.map((sev) => ({
       label: sev,
       data: keys.map((key) => gm[key]?.[sev] ?? 0),
       backgroundColor: SEV_COLORS[sev] ?? "#94a3b8",
+      borderWidth: 0,
     })),
   };
 });
@@ -526,6 +596,7 @@ const highRiskTeamBarOptions = {
 const stackedBarOptions = {
   responsive: true,
   maintainAspectRatio: false,
+  layout: CHART_LAYOUT_PAD,
   scales: {
     x: {
       stacked: true,
@@ -550,14 +621,7 @@ const stackedBarOptions = {
     },
   },
   plugins: {
-    legend: {
-      position: "bottom",
-      labels: {
-        color: CHART_CHROME.axis,
-        padding: 12,
-        usePointStyle: true,
-      },
-    },
+    legend: SEVERITY_CHART_LEGEND,
     tooltip: {
       bodyColor: "#334155",
       titleColor: "#334155",
@@ -923,11 +987,11 @@ async function downloadModuleCsv() {
       </div>
 
       <div class="dash-charts dash-charts--triple">
-        <div class="card chart-card">
+        <div class="card chart-card chart-card--severity-legend">
           <div class="card__head">
             <div class="card__head-main">
               <h2 class="card__title">Severity 분포</h2>
-              <p class="card__subtitle">{{ scopeLabel }}{{ isAllScope ? " · B·H·M만" : "" }}</p>
+              <p class="card__subtitle">{{ chartCardScopeLine }}</p>
             </div>
           </div>
           <div class="chart-box chart-box--pair">
@@ -935,11 +999,13 @@ async function downloadModuleCsv() {
             <p v-else class="chart-empty">데이터 없음</p>
           </div>
         </div>
-        <div v-if="!isAllScope" class="card chart-card">
+        <div v-if="!isAllScope" class="card chart-card chart-card--severity-legend">
           <div class="card__head">
             <div class="card__head-main">
               <h2 class="card__title">Module × Severity (스택)</h2>
-              <p class="card__subtitle">{{ scopeLabel }}{{ stackChartSubtitle }}</p>
+              <p class="card__subtitle">
+                {{ chartCardScopeLine }}<span class="card__subtitle-hint"> · 스택: 첫 경로 세그먼트</span>
+              </p>
             </div>
           </div>
           <div class="chart-box chart-box--pair">
@@ -1068,10 +1134,16 @@ async function downloadModuleCsv() {
             셀 클릭 시 해당 경로 접두로 이슈 목록이 열립니다.
           </p>
           <div class="excel-wrap">
-            <table class="excel excel--module-bilingual">
+            <table
+              class="excel excel--module-bilingual"
+              :class="{
+                'excel--module-bilingual--path-only':
+                  !showModuleKoColumnByProjectId[proj.projectId],
+              }"
+            >
               <thead>
                 <tr>
-                  <th>업무명</th>
+                  <th v-if="showModuleKoColumnByProjectId[proj.projectId]">업무명</th>
                   <th>경로</th>
                   <th
                     v-for="s in SEVERITY_OPTIONS"
@@ -1085,7 +1157,10 @@ async function downloadModuleCsv() {
               </thead>
               <tbody v-if="isPathTreeProject(proj)">
                 <tr v-for="row in pathTreeVisibleRows(proj)" :key="proj.projectId + '-' + row.path">
-                  <td class="excel__name excel__name--ko">
+                  <td
+                    v-if="showModuleKoColumnByProjectId[proj.projectId]"
+                    class="excel__name excel__name--ko"
+                  >
                     {{ tableModuleKo(proj.projectId, row.path) }}
                   </td>
                   <td class="excel__name module-tree__module excel__path-cell">
@@ -1132,7 +1207,10 @@ async function downloadModuleCsv() {
               </tbody>
               <tbody v-else>
                 <tr v-for="mRow in moduleRowsFor(proj)" :key="proj.projectId + '-' + mRow.name">
-                  <td class="excel__name excel__name--ko">
+                  <td
+                    v-if="showModuleKoColumnByProjectId[proj.projectId]"
+                    class="excel__name excel__name--ko"
+                  >
                     {{ tableModuleKo(proj.projectId, mRow.name) }}
                   </td>
                   <td class="excel__name excel__path-cell">

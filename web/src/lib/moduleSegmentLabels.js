@@ -17,6 +17,19 @@ function stripLeadingSrcSegments(segments) {
   return out;
 }
 
+/** `maps.<id>.tree` 한글 치환 사용 여부. 생략·true면 사용, false면 트리 무시(업무명 unknown). */
+export function isTreeLabelsEnabledForProfile(map) {
+  if (!map || typeof map !== "object") return false;
+  if (map.treeEnabled === false) return false;
+  return true;
+}
+
+/** 대시보드 Module 표 — `업무명` 열 노출 여부 */
+export function isTreeLabelsEnabledForProject(projectId) {
+  const profileId = profileIdForProject(projectId);
+  return isTreeLabelsEnabledForProfile(segmentLabels.maps?.[profileId]);
+}
+
 function findSegmentKey(node, segment) {
   if (!node || typeof node !== "object") return null;
   const lower = String(segment || "").trim().toLowerCase();
@@ -85,6 +98,9 @@ export function resolveLeafDisplay(profileId, cumulativePath) {
   }
 
   const map = segmentLabels.maps?.[profileId];
+  if (!isTreeLabelsEnabledForProfile(map)) {
+    return { ko: "unknown", en: enLeaf };
+  }
   const tree = map?.tree;
   if (!tree || typeof tree !== "object") {
     return { ko: "unknown", en: enLeaf };
@@ -98,16 +114,6 @@ export function resolveLeafDisplay(profileId, cumulativePath) {
     }
   }
   return { ko: "unknown", en: enLeaf };
-}
-
-/**
- * 스택 막대 X축: `한글:영문` (영문은 집계 키/마지막 세그먼트)
- * @param {string} profileId
- * @param {string} stackKey
- */
-export function chartStackAxisLabel(profileId, stackKey) {
-  const { ko, en } = resolveLeafDisplay(profileId, stackKey);
-  return `${ko}:${en}`;
 }
 
 /**

@@ -1,10 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
-import { useRouter } from "vue-router";
 import segmentLabels from "../../../config/module_segment_labels.json";
 import { notifyTeamMappingUpdated } from "../lib/teamMappingEvents.js";
-
-const router = useRouter();
 
 /** 서버 GET 진행 중(폼은 `config` 번들로 먼저 채움) */
 const loading = ref(true);
@@ -236,6 +233,12 @@ onMounted(() => {
 
 <template>
   <div class="wrap dashboard admin-team-mapping">
+    <nav class="crumb" aria-label="경로">
+      <router-link :to="{ name: 'dashboard' }" class="crumb__link">대시보드</router-link>
+      <span class="crumb__sep" aria-hidden="true">/</span>
+      <span class="crumb__here">High risk 팀 매칭</span>
+    </nav>
+
     <header class="hero">
       <p class="hero__eyebrow">설정</p>
       <h1>High risk 팀 매칭</h1>
@@ -250,12 +253,7 @@ onMounted(() => {
       </div>
     </header>
 
-    <div class="toolbar dashboard__toolbar">
-      <div class="dashboard__toolbar-left">
-        <button type="button" class="btn btn--secondary btn--head" @click="router.push({ name: 'dashboard' })">
-          ← 대시보드
-        </button>
-      </div>
+    <div class="toolbar dashboard__toolbar admin-team-mapping__toolbar">
       <div class="dashboard__toolbar-right admin-team-mapping__toolbar-actions">
         <p v-if="loading" class="admin-team-mapping__sync-hint" role="status">서버와 동기화 중…</p>
         <button type="button" class="btn btn--secondary btn--head" :disabled="loading" @click="revert">
