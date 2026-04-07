@@ -1,0 +1,15 @@
+---
+description: web/ 수정 후 Vite 프로덕션 빌드로 검증
+globs: web/**
+alwaysApply: false
+---
+
+# Web — 수정 후 빌드
+
+- `web/` 아래(Vue, CSS, JS, `index.html`, Vite 설정 등)를 **변경한 뒤**에는 반드시 프로젝트 루트에서 다음을 실행해 번들·문법 오류가 없는지 확인한다.
+
+```bash
+cd web && npm run build
+```
+
+- 로컬 개발만 할 때 `npm run dev`는 저장 시 HMR로 반영되므로 **매번** 프로덕션 빌드가 필요하진 않다. 다만 이 저장소에서 웹을 손댄 세션에서는 **작업 마무리 시 또는 PR 전**에 위 빌드를 한 번 돌리는 것을 기본으로 한다.

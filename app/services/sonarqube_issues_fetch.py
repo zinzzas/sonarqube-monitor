@@ -17,6 +17,8 @@ SonarQube `GET /api/issues/search` 전량 수집 (OPEN).
 
 ## 엣지
 - 하루 구간에도 10,000 초과면 경고 로그 후 해당 구간은 **최대 10,000건만** 수집(데이터 손실 가능, 극히 드묾).
+- 날짜 샤딩 상한은 **고정 미래 연도(2038 등)를 쓰지 않는다.** Sonar는 `createdAfter`가 **현재 시각 이후**이면 400
+  (`Start bound cannot be in the future`) 를 반환한다. 상한은 **UTC 기준 내일 0시**(createdBefore 전용)로 맞춘다.
 """
 from __future__ import annotations
 
@@ -47,7 +49,16 @@ SONAR_SEVERITY_FILTERS: tuple[str, ...] = (
 )
 
 _RANGE_START = datetime(2000, 1, 1, tzinfo=timezone.utc)
-_RANGE_END = datetime(2038, 1, 1, tzinfo=timezone.utc)
+
+
+def _utc_tomorrow_start() -> datetime:
+    """
+    issues/search 의 createdBefore 는 통상 exclusive 날짜 문자열.
+    상한을 '내일 00:00 UTC'로 두면 오늘까지의 이슈만 포함되고, 미래 구간 요청을 막는다.
+    """
+    now = datetime.now(timezone.utc)
+    d = now.date() + timedelta(days=1)
+    return datetime(d.year, d.month, d.day, tzinfo=timezone.utc)
 
 
 def _max_page_index(page_size: int) -> int:
@@ -180,6 +191,8 @@ async def _fetch_severity_date_shard(
     t1: datetime,
 ) -> list[dict[str, Any]]:
     """[t0, t1) 반열린 구간에서 단일 severity 수집. total > 10k 이면 이진 분할."""
+    end_cap = _utc_tomorrow_start()
+    t1 = min(t1, end_cap)
     if t1 <= t0:
         return []
 
@@ -227,14 +240,14 @@ async def _fetch_one_sonar_severity(component_key: str, sonar_severity: str) -> 
                 sonar_severity,
             )
             return await _fetch_severity_date_shard(
-                component_key, sonar_severity, _RANGE_START, _RANGE_END
+                component_key, sonar_severity, _RANGE_START, _utc_tomorrow_start()
             )
         raise
 
     total_n = _paging_total(first)
     if total_n is not None and total_n > SONAR_ISSUES_MAX_RESULTS:
         return await _fetch_severity_date_shard(
-            component_key, sonar_severity, _RANGE_START, _RANGE_END
+            component_key, sonar_severity, _RANGE_START, _utc_tomorrow_start()
         )
 
     ps = settings.sonar_issues_page_size
@@ -254,7 +267,7 @@ async def _fetch_one_sonar_severity(component_key: str, sonar_severity: str) -> 
             SONAR_ISSUES_MAX_RESULTS,
         )
         return await _fetch_severity_date_shard(
-            component_key, sonar_severity, _RANGE_START, _RANGE_END
+            component_key, sonar_severity, _RANGE_START, _utc_tomorrow_start()
         )
     return linear
 

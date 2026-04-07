@@ -723,7 +723,10 @@ async function downloadModuleCsv() {
           <span class="kpi__label">프로젝트 이슈</span>
           <span class="kpi__value">{{ displaySummary.totalIssues.toLocaleString("ko-KR") }}</span>
         </div>
-        <div class="kpi kpi--risk">
+        <div
+          class="kpi kpi--risk"
+          :class="{ 'kpi--risk-clear': displaySummary.highRisk === 0 }"
+        >
           <span class="kpi__label">High risk (BLOCKER+HIGH)</span>
           <span
             class="kpi__value"
@@ -732,6 +735,18 @@ async function downloadModuleCsv() {
               'kpi__value--hr-total-zero': displaySummary.highRisk === 0,
             }"
             >{{ displaySummary.highRisk.toLocaleString("ko-KR") }}</span>
+          <p
+            v-if="displaySummary.highRisk === 0"
+            class="kpi__hint kpi__hint--hr-zero"
+          >
+            BLOCKER·HIGH OPEN 이슈 없음
+          </p>
+          <p
+            v-else
+            class="kpi__hint kpi__hint--hr-alert"
+          >
+            BLOCKER·HIGH OPEN 이슈 있음
+          </p>
           <div
             v-if="showTeamHighRiskUi"
             class="kpi__team-row"
