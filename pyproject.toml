@@ -19,7 +19,9 @@ dependencies = [
 packages = ["app"]
 
 [tool.hatch.envs.default.scripts]
-# 프로젝트 루트에서: hatch run start
+# FastAPI/Uvicorn 공식 문서와 동일한 형태(앱에 --reload). 포트는 Vite 프록시(web/vite.config.js)와 맞춤.
+dev = "uvicorn main:app --reload --host 127.0.0.1 --port 9999"
+# python main.py — reload + .env 포함 감시 등은 main.py run_dev() 참고
 start = "python main.py"
 # 리로드 없이 고정 실행
 serve = "uvicorn main:app --host 127.0.0.1 --port 9999"

@@ -15,9 +15,10 @@ SonarQube **OPEN 이슈**를 대시보드(프로젝트·모듈·Severity·팀 Hi
 
 ## 빠른 시작 (요약)
 
-- **백엔드**: Python 3.11+, [Hatch](https://hatch.pypa.io/) 권장 — `hatch env create` 후 `hatch run start` (기본 `http://127.0.0.1:9999`, API `GET /api/health`).
+- **백엔드 (Windows, Hatch)**: `hatch env create` 후 **`hatch run dev`** 권장 — [FastAPI/Uvicorn 문서](https://fastapi.tiangolo.com/)와 같은 `uvicorn … --reload` 형태(`http://localhost:9999`, API `GET /api/health`).
+- **백엔드 (macOS)**: [macOS](#macos) — 동일하게 `uvicorn main:app --reload …` (포트는 이 저장소 기준 **9999**).
 - **프론트 개발**: `cd web && npm install && npm run dev` (Vite는 `/api`를 백엔드로 프록시).
-- **단일 포트**: `cd web && npm run build` 후 루트에서 백엔드만 실행 → `http://127.0.0.1:9999` 에 SPA.
+- **단일 포트**: `cd web && npm run build` 후 루트에서 백엔드만 실행 → `http://localhost:9999` 에 SPA.
 
 **상세(Windows Hatch, 트러블슈팅, `.env` 전체 표)** 는 아래 “환경 변수” 절과 동일하게 유지했습니다.
 
@@ -25,7 +26,7 @@ SonarQube **OPEN 이슈**를 대시보드(프로젝트·모듈·Severity·팀 Hi
 
 ## Windows 로컬 실행 가이드 (Hatch)
 
-이 문서는 **Windows 10/11**, **PowerShell**을 기준으로 합니다. macOS·Linux는 명령만 해당 셸에 맞게 바꾸면 됩니다.
+이 문서는 **Windows 10/11**, **PowerShell**을 기준으로 합니다. **macOS** 백엔드 실행은 아래 [macOS](#macos)를 참고하세요. Linux는 명령만 해당 셸에 맞게 바꾸면 됩니다.
 
 ### 1. 사전 이해: Python·pip·Hatch
 
@@ -125,7 +126,7 @@ hatch run python -c "import fastapi; print('ok')"
 
 ### 5. 환경 변수 (`.env`)
 
-프로젝트 **루트**에 `.env` 파일을 만들고 값을 넣습니다 (`main.py`와 같은 폴더).
+프로젝트 **루트**의 `.env`(`main.py`와 같은 폴더)에 **환경 변수를 설정**해야 합니다. 예시 편집:
 
 ```powershell
 notepad .env
@@ -145,26 +146,34 @@ notepad .env
 | `SONAR_HTTP_MAX_CONNECTIONS` | (선택) 기본 `2`. httpx가 Sonar에 동시에 열 연결 수 상한. |
 | `SONAR_HTTP_CONNECT_TIMEOUT_SECONDS` / `SONAR_HTTP_READ_TIMEOUT_SECONDS` | (선택) 연결·읽기 타임아웃(초). |
 
-Sonar 호스트·토큰은 **코드에 넣지 말고 `.env`만** 수정합니다. 그 외 옵션(`SONAR_AUTH`, `SONAR_PROXY` 등)은 `.env` 안 주석을 참고합니다.
+Sonar 호스트·토큰은 **코드에 넣지 말고** 환경 변수로 **`.env`에 설정**합니다. 그 외 옵션(`SONAR_AUTH`, `SONAR_PROXY` 등)은 `.env` 안 주석을 참고합니다.
 
 ---
 
 ### 6. 백엔드 실행 (포트 `9999`)
 
-프로젝트 루트에서:
+#### 표준에 가까운 방식 (권장)
+
+[FastAPI 문서](https://fastapi.tiangolo.com/)에서 가장 흔히 쓰는 것은 **uvicorn CLI** 로 앱을 지정하고 **`--reload`** 를 붙이는 형태입니다.
 
 ```powershell
-hatch run start
+hatch run dev
 ```
 
-- `start`는 `python main.py`와 같으며, **코드·`.env` 변경 시 자동 재기동**(uvicorn `--reload`)입니다.
-- 리로드 없이 고정 실행만 하려면:
+`dev` 는 `uvicorn main:app --reload --host localhost --port 9999` 와 같으며, `pyproject.toml` 의 `[tool.hatch.envs.default.scripts]` 에 정의되어 있습니다.
 
-  ```powershell
-  hatch run serve
-  ```
+**포트를 생략할 수 있나?** — uvicorn만 단독으로 쓸 때 `--port` 를 빼면 **기본값은 8000** 입니다. 이 저장소는 Vite 개발 서버가 `/api` 를 **`localhost:9999`** 로 프록시하므로(`web/vite.config.js`), **프론트와 같이 개발할 때는 9999 를 맞추는 것이 맞습니다.** 8000 으로 쓰려면 Vite의 `proxy.target` 도 함께 바꿔야 합니다.
 
-브라우저에서 API 확인: **http://127.0.0.1:9999/api/health**
+#### 그 외 스크립트
+
+| 명령 | 설명 |
+|------|------|
+| **`hatch run dev`** | **권장.** 공식 문서와 동일한 `uvicorn … --reload`. `localhost:9999`. |
+| `hatch run start` | `python main.py` → `main.py` 의 `run_dev()` (reload, **`0.0.0.0:9999`**, `.env` 변경도 감시). LAN에서 다른 기기로 접속할 때 유리. |
+| `hatch run serve` | 리로드 없음. `uvicorn main:app --host localhost --port 9999` 와 동일. |
+| `hatch run uvicorn main:app --host localhost --port 9999` | `serve` 와 동일 계열(수동으로 uvicorn 호출). |
+
+브라우저에서 API 확인: **http://localhost:9999/api/health** (또는 `http://localhost:9999/api/health`)
 
 ---
 
@@ -180,7 +189,7 @@ UI는 **Node.js**(LTS 권장)와 **npm**이 필요합니다. Windows에 없다�
 
 #### 개발 모드 (Vite, 포트 `5173`)
 
-`web/vite.config.js`에서 개발 서버는 **5173**이고, **`/api` 요청은 `http://127.0.0.1:9999`로 프록시**됩니다. **백엔드를 먼저** 띄운 뒤 프론트를 실행합니다.
+`web/vite.config.js`에서 개발 서버는 **5173**이고, **`/api` 요청은 `http://localhost:9999`로 프록시**됩니다. **백엔드를 먼저** 띄운 뒤 프론트를 실행합니다.
 
 ```powershell
 cd web
@@ -188,7 +197,7 @@ npm install
 npm run dev
 ```
 
-브라우저: **http://127.0.0.1:5173**
+브라우저: **http://localhost:5173**
 
 #### 한 포트만 쓰기 (백엔드가 정적 파일 서빙)
 
@@ -202,13 +211,37 @@ cd ..
 hatch run start
 ```
 
-브라우저: **http://127.0.0.1:9999**
+브라우저: **http://localhost:9999**
 
 (`web/dist`가 있어야 `main.py`가 SPA를 루트에서 제공합니다.)
 
 ---
 
-### 8. 자주 겪는 문제
+## macOS
+
+프로젝트 루트에서 의존성이 설치된 Python 환경에서, **FastAPI 문서와 같은 형태**는 다음과 같습니다 (`--reload` 로 코드 변경 시 재기동).
+
+```bash
+uvicorn main:app --reload --host localhost --port 9999
+```
+
+[Hatch](https://hatch.pypa.io/) 를 쓰는 경우 Windows 와 동일하게 `hatch run dev` 로 같은 인자를 실행할 수 있습니다.
+
+리로드 없이 고정만 할 때:
+
+```bash
+uvicorn main:app --host localhost --port 9999
+```
+
+API 확인: **http://localhost:9999/api/health**
+
+**포트:** 이 저장소는 Vite 프록시가 **9999** 이므로, 위처럼 맞추거나 `web/vite.config.js` 의 `proxy.target` 을 바꿉니다. `--port` 를 생략하면 uvicorn 기본 **8000** 입니다.
+
+환경 변수(Sonar 등)는 위 Windows 절의 **환경 변수 (`.env`)** 표를 참고해 **설정**해야 합니다.
+
+---
+
+## 자주 겪는 문제
 
 | 증상 | 점검 |
 |------|------|
