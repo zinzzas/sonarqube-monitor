@@ -258,7 +258,7 @@ watch(
 
 /**
  * Sonar API 재조회: `?module=` 제외 — 모듈은 클라이언트 필터만 (`useIssueListApiTrigger`).
- * @see docs/issue-list-navigation.md
+ * @see docs/03_design/frontend-ui.md
  */
 useIssueListApiTrigger({
   route,

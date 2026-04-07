@@ -1,5 +1,7 @@
 """
-SonarQube 이슈 전량 수집 후 프로젝트·모듈·Severity 집계 (main-dashboard-platform.md).
+SonarQube 이슈 전량 수집 후 프로젝트·모듈·Severity 집계.
+
+문서: docs/03_design/system-architecture.md, docs/02_analysis/functional-spec.md
 
 - SonarQube 호출은 동시에 여러 건을 날리지 않고, 프로젝트(및 페이징) 단위로 순차(await) 처리.
 - 대시보드는 요청한 projectId 한 건만 집계해 응답(고객사 서버 부하 완화).
@@ -7,7 +9,6 @@ SonarQube 이슈 전량 수집 후 프로젝트·모듈·Severity 집계 (main-d
 """
 from __future__ import annotations
 
-import asyncio
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -26,7 +27,7 @@ from app.core.team_high_risk import (
     team_display_order,
     team_labels_from_config,
 )
-from app.services.sonarqube_client import sonar_client
+from app.services.sonarqube_issues_fetch import fetch_all_issues
 
 # 조합된 `/api/metrics/dashboard` 응답 (단일 projectId 기준)
 _CACHE: dict[str, Any] | None = None
@@ -151,36 +152,6 @@ async def export_flat_issues_json() -> dict[str, Any]:
         "issues": rows,
         "errors": errors,
     }
-
-
-def _search_params(component_key: str, page: int) -> dict[str, str]:
-    params: dict[str, str] = {
-        "componentKeys": component_key,
-        "ps": str(settings.sonar_issues_page_size),
-        "p": str(page),
-        "statuses": "OPEN",
-    }
-    if settings.sonar_mirror_issue_statuses:
-        params["issueStatuses"] = "OPEN"
-    return params
-
-
-async def fetch_all_issues(component_key: str) -> list[dict[str, Any]]:
-    """OPEN 이슈 전량. Sonar 부하 완화를 위해 페이지 크기·페이지 간 대기는 설정으로 조절."""
-    all_issues: list[dict[str, Any]] = []
-    p = 1
-    page_size = settings.sonar_issues_page_size
-    delay_s = settings.sonar_issues_page_delay_ms / 1000.0
-    while True:
-        data = await sonar_client.issues_search(_search_params(component_key, p))
-        issues = data.get("issues") or []
-        all_issues.extend(issues)
-        if len(issues) < page_size:
-            break
-        p += 1
-        if delay_s > 0:
-            await asyncio.sleep(delay_s)
-    return all_issues
 
 
 def _with_canonical_label(

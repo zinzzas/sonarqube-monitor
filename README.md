@@ -1,6 +1,25 @@
 # SonarQube Monitor
 
-SonarQube 이슈를 대시보드(프로젝트·모듈·Severity)와 상세 목록으로 보는 도구입니다. **FastAPI** + **Vue 3 / Vite**입니다.
+SonarQube **OPEN 이슈**를 대시보드(프로젝트·모듈·Severity·팀 High risk)와 상세 목록으로 보는 도구입니다. **FastAPI** + **Vue 3 / Vite**입니다.
+
+## 문서 (흐름 기반)
+
+기획·분석·설계·개발·테스트·출시는 **[docs/README.md](docs/README.md)** 에서 단계별로 연결합니다.
+
+| 단계 | 들어가기 |
+|------|----------|
+| 개요 | [docs/00_overview/project-overview.md](docs/00_overview/project-overview.md) |
+| 배포·실행 | [docs/06_release/deployment-guide.md](docs/06_release/deployment-guide.md) |
+
+---
+
+## 빠른 시작 (요약)
+
+- **백엔드**: Python 3.11+, [Hatch](https://hatch.pypa.io/) 권장 — `hatch env create` 후 `hatch run start` (기본 `http://127.0.0.1:9999`, API `GET /api/health`).
+- **프론트 개발**: `cd web && npm install && npm run dev` (Vite는 `/api`를 백엔드로 프록시).
+- **단일 포트**: `cd web && npm run build` 후 루트에서 백엔드만 실행 → `http://127.0.0.1:9999` 에 SPA.
+
+**상세(Windows Hatch, 트러블슈팅, `.env` 전체 표)** 는 아래 “환경 변수” 절과 동일하게 유지했습니다.
 
 ---
 
@@ -207,6 +226,7 @@ hatch run start
 | `component_projects.json` | 프로젝트 목록·Sonar `componentKey` |
 | `module_grouping.json` | 프로젝트별 모듈 경로 추출(Java·Vue 등) |
 | `dashboard.json` | 대시보드 제목·설명 문구 |
+| `module_segment_labels.json` | 한글 라벨·팀 매핑 등 — [docs/03_design/module-segment-labels.md](docs/03_design/module-segment-labels.md) |
 
 ---
 
@@ -215,6 +235,8 @@ hatch run start
 - `GET /api/health`
 - `GET /api/metrics/dashboard` — 대시보드 집계
 - `GET /api/issues/search` — Sonar 이슈 검색 프록시
+
+전체 목록: [docs/02_analysis/api-requirements.md](docs/02_analysis/api-requirements.md)
 
 ---
 

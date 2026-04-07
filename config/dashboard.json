@@ -3,6 +3,6 @@
   "hero": {
     "eyebrow": "PM · 품질지표",
     "title": "OOOO 재구축 프로젝트",
-    "subtitle": "SonarQube 오픈·확정 이슈를 프로젝트·모듈·Severity로 집계한 대시보드입니다."
+    "subtitle": "SonarQube Severity(심각도) 기준으로 OPEN·확정 이슈를 프로젝트·모듈별로 집계한 대시보드입니다."
   }
 }
