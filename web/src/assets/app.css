@@ -1099,6 +1099,13 @@ code {
   border-bottom-color: rgba(16, 185, 129, 0.2);
 }
 
+.issue-list .card--filters .card__title {
+  color: var(--dashboard-emerald);
+  text-transform: none;
+  letter-spacing: 0.06em;
+  font-size: 0.9rem;
+}
+
 .issue-list .field input:focus,
 .issue-list .field.sort-field .select:focus,
 .issue-list .filter-inline-input:focus,
@@ -1126,11 +1133,92 @@ code {
 .issue-list .table-panel {
   border-color: rgba(16, 185, 129, 0.22);
   background: linear-gradient(180deg, #fafffe 0%, var(--bg-elevated) 100%);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/* 뷰포트 밖으로 밀리지 않게 — 열 폭은 % 합계 100% */
+.issue-list .tbl {
+  table-layout: fixed;
+  width: 100%;
 }
 
 .issue-list .tbl th {
   background: linear-gradient(180deg, #f0fdf7 0%, #ecfdf5 100%);
   box-shadow: 0 1px 0 rgba(16, 185, 129, 0.15);
+}
+
+/* 열 간 시각 정렬: 모든 셀 동일 인셋(첫 열만 좁게 두지 않음) */
+.issue-list .tbl th,
+.issue-list .tbl td {
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 0.62rem 0.75rem;
+}
+
+/*
+ * 열 폭: 요청 6·5.8·21·6·25·5·13·11% (합 92.8%) → 100% 맞춤 정규화 × (100/92.8)
+ */
+.issue-list .tbl th.tbl__col-severity,
+.issue-list .tbl td.tbl__col-severity {
+  width: 6.4655%;
+}
+
+.issue-list .tbl td.tbl__col-severity .pill {
+  font-size: 0.62rem;
+  padding: 0.15rem 0.3rem;
+  letter-spacing: 0.02em;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.issue-list .tbl th.tbl__col-status,
+.issue-list .tbl td.tbl__col-status {
+  width: 6.25%;
+  font-size: 0.72rem;
+  word-break: break-word;
+}
+
+.issue-list .tbl th.tbl__col-msg,
+.issue-list .tbl td.tbl__col-msg {
+  width: 22.6293%;
+  max-width: none;
+  word-break: break-word;
+}
+
+.issue-list .tbl th.tbl__col-rule,
+.issue-list .tbl td.tbl__col-rule {
+  width: 6.4655%;
+  word-break: break-all;
+  white-space: normal;
+}
+
+.issue-list .tbl th.tbl__col-component,
+.issue-list .tbl td.tbl__col-component {
+  width: 26.9397%;
+  word-break: break-all;
+}
+
+.issue-list .tbl th.tbl__col-line,
+.issue-list .tbl td.tbl__col-line {
+  width: 5.3879%;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.issue-list .tbl th.tbl__col-author,
+.issue-list .tbl td.tbl__col-author {
+  width: 14.0086%;
+  word-break: break-all;
+  font-size: 0.78rem;
+}
+
+.issue-list .tbl th.tbl__col-issue-date,
+.issue-list .tbl td.tbl__col-issue-date {
+  width: 11.8534%;
+  word-break: break-word;
+  font-size: 0.75rem;
+  white-space: normal;
 }
 
 .issue-list .tbl tbody tr:not(.sentinel-row):hover {
@@ -1734,6 +1822,11 @@ code {
 .dashboard .dash-charts--triple .chart-card--severity-legend .card__subtitle-hint {
   font-weight: 500;
   color: var(--text-muted);
+}
+
+/* 팀별 High risk — KPI·툴바와 동일 에메랄드 타이틀 톤 */
+.dashboard .dash-charts--triple .chart-card--team-hr .card__title {
+  color: var(--dashboard-emerald);
 }
 
 .dashboard .dash-charts--triple .chart-card--severity-legend .chart-box--pair {

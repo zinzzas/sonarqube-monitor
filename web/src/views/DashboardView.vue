@@ -1015,7 +1015,7 @@ async function downloadModuleCsv() {
         </div>
         <div
           v-if="showTeamHighRiskUi"
-          class="card chart-card chart-card--team-hr"
+          class="card chart-card chart-card--severity-legend chart-card--team-hr"
           aria-label="팀별 High risk 차트"
         >
           <div class="card__head">

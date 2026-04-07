@@ -547,14 +547,14 @@ function onProjectSelectChange() {
       <table class="tbl">
         <thead>
           <tr>
-            <th>Severity</th>
-            <th>Status</th>
-            <th>Message</th>
-            <th>Rule</th>
-            <th>Component</th>
-            <th>Line</th>
-            <th>Author</th>
-            <th>생성</th>
+            <th class="tbl__col-severity">Severity</th>
+            <th class="tbl__col-status">Status</th>
+            <th class="tbl__col-msg">Message</th>
+            <th class="tbl__col-rule">Rule</th>
+            <th class="tbl__col-component">Component</th>
+            <th class="tbl__col-line">Line</th>
+            <th class="tbl__col-author">Author</th>
+            <th class="tbl__col-issue-date">Issue date</th>
           </tr>
         </thead>
         <tbody>
@@ -567,15 +567,15 @@ function onProjectSelectChange() {
             v-for="(row, idx) in displayedIssues"
             :key="issueRowStableKey(row, idx)"
           >
-            <td>
+            <td class="tbl__col-severity">
               <span class="pill" :class="severityPillClassForIssue(row)">
                 {{ displaySeverityForIssue(row) }}
               </span>
             </td>
-            <td>{{ row.status || "—" }}</td>
-            <td class="msg">{{ row.message || "—" }}</td>
-            <td class="mono small">{{ ruleLabel(row) }}</td>
-            <td class="mono small">
+            <td class="tbl__col-status">{{ row.status || "—" }}</td>
+            <td class="msg tbl__col-msg">{{ row.message || "—" }}</td>
+            <td class="mono small tbl__col-rule">{{ ruleLabel(row) }}</td>
+            <td class="mono small tbl__col-component">
               <a
                 v-if="sonarIssueWebUrl(row)"
                 :href="sonarIssueWebUrl(row)"
@@ -586,9 +586,9 @@ function onProjectSelectChange() {
               >{{ componentLabel(row) }}</a>
               <template v-else>{{ componentLabel(row) }}</template>
             </td>
-            <td class="mono">{{ row.line != null ? row.line : "—" }}</td>
-            <td>{{ authorCell(row) }}</td>
-            <td class="small">{{ formatDate(row.creationDate) }}</td>
+            <td class="mono tbl__col-line">{{ row.line != null ? row.line : "—" }}</td>
+            <td class="tbl__col-author">{{ authorCell(row) }}</td>
+            <td class="small tbl__col-issue-date">{{ formatDate(row.creationDate) }}</td>
           </tr>
           <tr v-if="hasMore" ref="sentinelEl" class="sentinel-row">
             <td colspan="8" class="sentinel-row__cell">
