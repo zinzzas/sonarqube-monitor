@@ -1157,11 +1157,11 @@ code {
 }
 
 /*
- * 열 폭: 요청 6·5.8·21·6·25·5·13·11% (합 92.8%) → 100% 맞춤 정규화 × (100/92.8)
+ * 열 폭: 요청 7·5.8·20·6·25·5·13·10% (합 91.8%) → 100% 맞춤 정규화 × (100/91.8)
  */
 .issue-list .tbl th.tbl__col-severity,
 .issue-list .tbl td.tbl__col-severity {
-  width: 6.4655%;
+  width: 7.6253%;
 }
 
 .issue-list .tbl td.tbl__col-severity .pill {
@@ -1174,48 +1174,48 @@ code {
 
 .issue-list .tbl th.tbl__col-status,
 .issue-list .tbl td.tbl__col-status {
-  width: 6.25%;
+  width: 6.3181%;
   font-size: 0.72rem;
   word-break: break-word;
 }
 
 .issue-list .tbl th.tbl__col-msg,
 .issue-list .tbl td.tbl__col-msg {
-  width: 22.6293%;
+  width: 21.7865%;
   max-width: none;
   word-break: break-word;
 }
 
 .issue-list .tbl th.tbl__col-rule,
 .issue-list .tbl td.tbl__col-rule {
-  width: 6.4655%;
+  width: 6.5359%;
   word-break: break-all;
   white-space: normal;
 }
 
 .issue-list .tbl th.tbl__col-component,
 .issue-list .tbl td.tbl__col-component {
-  width: 26.9397%;
+  width: 27.2331%;
   word-break: break-all;
 }
 
 .issue-list .tbl th.tbl__col-line,
 .issue-list .tbl td.tbl__col-line {
-  width: 5.3879%;
+  width: 5.4466%;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
 .issue-list .tbl th.tbl__col-author,
 .issue-list .tbl td.tbl__col-author {
-  width: 14.0086%;
+  width: 14.1612%;
   word-break: break-all;
   font-size: 0.78rem;
 }
 
 .issue-list .tbl th.tbl__col-issue-date,
 .issue-list .tbl td.tbl__col-issue-date {
-  width: 11.8534%;
+  width: 10.8932%;
   word-break: break-word;
   font-size: 0.75rem;
   white-space: normal;
