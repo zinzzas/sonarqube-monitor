@@ -13,7 +13,7 @@
         }
       },
       {
-        "teamId": "team_2",
+        "teamId": "team_b",
         "label": "개발2팀",
         "when": {
           "modules": [
@@ -23,7 +23,7 @@
         }
       },
       {
-        "teamId": "team_3",
+        "teamId": "team_c",
         "label": "개발3팀",
         "when": {
           "modules": [
@@ -33,7 +33,7 @@
         }
       },
       {
-        "teamId": "team_4",
+        "teamId": "team_d",
         "label": "공통",
         "when": {
           "modules": [
@@ -51,6 +51,7 @@
   },
   "maps": {
     "java_tree": {
+      "treeEnabled": true,
       "exclude": {
         "_note": "샘플은 예시이며 필요 없으면 배열 비우기. path_tree: /fims/ 앵커 이후 경로 기준",
         "pathPrefixes": [
@@ -85,6 +86,7 @@
       }
     },
     "vue_src_tree": {
+      "treeEnabled": false,
       "_note": "src/ 제거 후 첫 세그먼트가 views·components·api 등 다양함. api만 두면 views/... 경로는 unknown. 접두 스킵 매칭(moduleSegmentLabels)으로 views/foo/api/common → api/common 도 라벨 가능",
       "exclude": {
         "_note": "샘플은 예시이며 필요 없으면 배열 비우기. src/ strip 후 첫 세그먼트 기준(앵커 없음)",

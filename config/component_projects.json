@@ -10,8 +10,7 @@
     "id": "h1",
     "label": "h1 Web (Vue)",
     "componentKey": "devopsportal-fe",
-    "stack": "vue",
-    "severityFloor": "BLOCKER"
+    "stack": "vue"
   },
   {
     "id": "h2",
