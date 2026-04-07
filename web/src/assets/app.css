@@ -379,6 +379,27 @@ code {
   max-width: 26rem;
 }
 
+.issue-list-filters .filter-row-author {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.issue-list-filters .filter-inline-select--author {
+  flex: 0 1 auto;
+  min-width: 10rem;
+  max-width: 20rem;
+}
+
+.issue-list-filters .filter-row-author .filter-inline-input {
+  flex: 1 1 12rem;
+  min-width: 8rem;
+  max-width: 22rem;
+}
+
 .filter-grid-row__hint {
   margin: 0;
 }

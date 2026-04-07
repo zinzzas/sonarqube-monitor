@@ -1,4 +1,4 @@
-import { nextTick, watch } from "vue";
+import { nextTick, unref, watch } from "vue";
 
 /**
  * 이슈 목록 Sonar API 재조회 트리거만 담당.
@@ -14,6 +14,7 @@ export function useIssueListApiTrigger({
   filterStatuses,
   sortBySeverity,
   pageSize,
+  filterAuthor,
   onLoadFirst,
 }) {
   let seq = 0;
@@ -29,6 +30,7 @@ export function useIssueListApiTrigger({
       stKey: JSON.stringify([...(filterStatuses.value ?? [])].sort()),
       sort: sortBySeverity.value,
       ps: pageSize.value,
+      author: filterAuthor != null ? String(unref(filterAuthor) ?? "").trim() : "",
     }),
     () => {
       if (route.name !== "issues") return;

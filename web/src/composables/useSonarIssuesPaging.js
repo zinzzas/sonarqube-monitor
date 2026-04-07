@@ -69,6 +69,7 @@ export function useSonarIssuesPaging(refs) {
     filterStatuses,
     sortBySeverity,
     severitiesToApiParam,
+    filterAuthor,
   } = refs;
 
   /** Ref | ComputedRef | 값 혼용 시에도 안전 */
@@ -77,12 +78,15 @@ export function useSonarIssuesPaging(refs) {
   }
 
   function commonArgs() {
+    const rawAuthor = filterAuthor != null ? unref(filterAuthor) : "";
+    const authorFilter = typeof rawAuthor === "string" ? rawAuthor.trim() : "";
     return {
       componentKeys: resolveComponentKey(),
       filterSeverities: unref(filterSeverities),
       filterStatuses: unref(filterStatuses),
       sortBySeverity: unref(sortBySeverity),
       severitiesToApiParam,
+      authorFilter,
     };
   }
 

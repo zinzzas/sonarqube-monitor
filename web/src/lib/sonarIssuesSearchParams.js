@@ -23,6 +23,7 @@ function isAllSeveritiesSelected(selected) {
  * @param {string[]} args.filterStatuses
  * @param {string} args.sortBySeverity '' | severity_desc | …
  * @param {(s: string[]) => string} args.severitiesToApiParam
+ * @param {string} [args.authorFilter] Sonar `authors` (SCM 로그인, 콤마 구분 복수 가능)
  * @returns {URLSearchParams}
  */
 export function buildSonarIssuesSearchParams(args) {
@@ -34,6 +35,7 @@ export function buildSonarIssuesSearchParams(args) {
     filterStatuses,
     sortBySeverity,
     severitiesToApiParam,
+    authorFilter,
   } = args;
 
   const q = new URLSearchParams();
@@ -47,6 +49,11 @@ export function buildSonarIssuesSearchParams(args) {
   const statuses =
     filterStatuses?.length > 0 ? [...new Set(filterStatuses)].join(",") : "OPEN";
   q.set("statuses", statuses);
+
+  const auth = typeof authorFilter === "string" ? authorFilter.trim() : "";
+  if (auth) {
+    q.set("authors", auth);
+  }
 
   if (!isAllSeveritiesSelected(filterSeverities)) {
     const sev = severitiesToApiParam(filterSeverities);

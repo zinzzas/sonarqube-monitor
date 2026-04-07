@@ -5,6 +5,11 @@ import { useComponentProjectSelect } from "../composables/useComponentProjectSel
 import { useIssueListApiTrigger } from "../composables/useIssueListApiTrigger.js";
 import { useSonarIssuesPaging } from "../composables/useSonarIssuesPaging.js";
 import { LOAD_MORE_CHEVRON_SRC } from "../loadingOverlay.js";
+import {
+  getCachedAuthorsForProject,
+  issueMatchesAuthorFilter,
+  mergeIssueAuthorsIntoCache,
+} from "../lib/authorCache.js";
 import { issueMatchesTeamFilter } from "../lib/teamIdForIssue.js";
 import { issueComponentKey, issueMatchesModuleFilter } from "../module.js";
 import {
@@ -33,6 +38,24 @@ const filterSeverities = ref([...SEVERITY_OPTIONS]);
 /** 대시보드 집계(metrics)와 동일하게 OPEN만 — 전체 선택 시 Sonar 파라미터 조합으로 0건이 나오는 환경 방지 */
 const filterStatuses = ref(["OPEN"]);
 
+/** Sonar `authors`(SCM 로그인). 기본 공백 — 직접 입력이 콤보보다 우선 */
+const authorManual = ref("");
+const authorFromCombo = ref("");
+const filterAuthor = computed(() => {
+  const m = authorManual.value.trim();
+  if (m) return m;
+  return authorFromCombo.value.trim();
+});
+const cachedAuthorOptions = ref([]);
+
+function projectIdForFilters() {
+  return String(selectedProjectId.value || route.params.projectId || "").trim();
+}
+
+function refreshAuthorComboOptions() {
+  cachedAuthorOptions.value = getCachedAuthorsForProject(projectIdForFilters());
+}
+
 const MODULE_AUTO_FETCH_MAX = 30;
 
 const {
@@ -53,6 +76,7 @@ const {
   filterStatuses,
   sortBySeverity,
   severitiesToApiParam,
+  filterAuthor,
 });
 
 const severitySortOptions = [
@@ -144,11 +168,12 @@ const moduleFilterMatchedNone = computed(() => {
   return n === 0;
 });
 
-/** 모듈 필터 적용 후 0건이면 로드된 원본을 그대로 표시(빈 표 방지). 팀 필터는 엄격 적용. */
+/** 모듈 필터 적용 후 0건이면 로드된 원본을 그대로 표시(빈 표 방지). 팀·Author 필터는 엄격 적용. */
 const displayedIssues = computed(() => {
   const m = moduleFilter.value;
   const t = teamFilter.value;
   const pid = activeProjectId.value;
+  const auth = filterAuthor.value;
   let raw = issues.value;
   if (m) {
     const filtered = raw.filter((row) => issueMatchesModuleFilter(row, pid, m));
@@ -156,6 +181,9 @@ const displayedIssues = computed(() => {
   }
   if (t) {
     raw = raw.filter((row) => issueMatchesTeamFilter(row, pid, t));
+  }
+  if (auth) {
+    raw = raw.filter((row) => issueMatchesAuthorFilter(row, auth));
   }
   return raw;
 });
@@ -171,6 +199,27 @@ function onLoadFirst() {
 watch([moduleFilter, activeProjectId], () => {
   moduleAutoFetchCount.value = 0;
 });
+
+watch(
+  () => [selectedProjectId.value, route.params.projectId],
+  () => {
+    authorFromCombo.value = "";
+    authorManual.value = "";
+    refreshAuthorComboOptions();
+  },
+  { immediate: true },
+);
+
+watch(
+  () => issues.value,
+  (list) => {
+    const pid = projectIdForFilters();
+    if (!pid || !list?.length) return;
+    mergeIssueAuthorsIntoCache(pid, list);
+    refreshAuthorComboOptions();
+  },
+  { deep: true },
+);
 
 watch(
   () => [
@@ -239,6 +288,7 @@ const filterHint = computed(() => {
     }
   }
   if (teamFilter.value) parts.push(`팀(경로 매칭): ${teamFilter.value}`);
+  if (filterAuthor.value) parts.push(`Author: ${filterAuthor.value}`);
   return parts.length ? parts.join(" · ") : "";
 });
 
@@ -298,6 +348,7 @@ useIssueListApiTrigger({
   filterStatuses,
   sortBySeverity,
   pageSize,
+  filterAuthor,
   onLoadFirst,
 });
 
@@ -412,6 +463,31 @@ function onProjectSelectChange() {
               <input v-model="filterStatuses" type="checkbox" :value="st" />
               <span class="chk-chip__face">{{ st }}</span>
             </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="filter-grid-row">
+        <span class="filter-title">Author</span>
+        <div class="filter-grid-row__main">
+          <div class="filter-row-author">
+            <select
+              v-model="authorFromCombo"
+              class="select filter-inline-select filter-inline-select--author"
+              aria-label="저장소에 캐시된 Author(SCM 로그인)"
+            >
+              <option value="">(전체)</option>
+              <option v-for="a in cachedAuthorOptions" :key="a" :value="a">{{ a }}</option>
+            </select>
+            <input
+              v-model.trim="authorManual"
+              type="text"
+              class="filter-inline-input"
+              placeholder="직접 입력 시 우선 적용 (Sonar authors)"
+              autocomplete="off"
+              spellcheck="false"
+              aria-label="Author 직접 입력"
+            />
           </div>
         </div>
       </div>
