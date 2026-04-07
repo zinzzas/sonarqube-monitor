@@ -1,6 +1,7 @@
 import { computed, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { COMPONENT_PROJECTS } from "../config/componentProjects.js";
+import { parseSeverityFloor } from "../severity.js";
 
 /**
  * 프로젝트 콤보 선택 → `componentKeys` 문자열(SonarQube API용)
@@ -43,10 +44,25 @@ export function useComponentProjectSelect() {
     return key;
   });
 
+  /** 이슈 목록·Sonar 쿼리 — 미설정 시 INFO (전 심각도) */
+  const severityFloor = computed(() => {
+    const pid = resolvedProjectId.value;
+    if (!pid) {
+      return "INFO";
+    }
+    const row = COMPONENT_PROJECTS.find((p) => p.id === pid);
+    const raw = row?.severityFloor;
+    if (raw == null || String(raw).trim() === "") {
+      return "INFO";
+    }
+    return parseSeverityFloor(String(raw));
+  });
+
   return {
     projectOptions,
     selectedProjectId,
     resolvedProjectId,
     componentKeys,
+    severityFloor,
   };
 }

@@ -6,12 +6,23 @@
  * - 심각도는 전부 선택이면 파라미터 생략(Sonar 전체).
  * - 정렬: IssueList 기본은 `severity_desc`(높은 심각도 우선) — 첫 페이지만 볼 때 HIGH/BLOCKER가 보이도록 함.
  */
-import { SEVERITY_OPTIONS } from "../severity.js";
+import {
+  SEVERITY_OPTIONS,
+  parseSeverityFloor,
+  standardSeveritiesAtOrAbove,
+} from "../severity.js";
 
 function isAllSeveritiesSelected(selected) {
   if (!selected?.length) return true;
   if (selected.length !== SEVERITY_OPTIONS.length) return false;
   return SEVERITY_OPTIONS.every((s) => selected.includes(s));
+}
+
+function shouldOmitSeveritiesParam(filterSeverities, severityFloor) {
+  if (parseSeverityFloor(severityFloor) !== "INFO") {
+    return false;
+  }
+  return isAllSeveritiesSelected(filterSeverities);
 }
 
 /**
@@ -24,6 +35,7 @@ function isAllSeveritiesSelected(selected) {
  * @param {string} args.sortBySeverity '' | severity_desc | …
  * @param {(s: string[]) => string} args.severitiesToApiParam
  * @param {string} [args.authorFilter] Sonar `authors` (SCM 로그인, 콤마 구분 복수 가능)
+ * @param {string} [args.severityFloor] component_projects `severityFloor` — INFO면 기존 동작, 그 외는 하한 이상만 API 요청
  * @returns {URLSearchParams}
  */
 export function buildSonarIssuesSearchParams(args) {
@@ -36,6 +48,7 @@ export function buildSonarIssuesSearchParams(args) {
     sortBySeverity,
     severitiesToApiParam,
     authorFilter,
+    severityFloor,
   } = args;
 
   const q = new URLSearchParams();
@@ -55,8 +68,15 @@ export function buildSonarIssuesSearchParams(args) {
     q.set("authors", auth);
   }
 
-  if (!isAllSeveritiesSelected(filterSeverities)) {
-    const sev = severitiesToApiParam(filterSeverities);
+  const floor = severityFloor ?? "INFO";
+  const allowedStd = standardSeveritiesAtOrAbove(floor);
+  let effective = (filterSeverities ?? []).filter((s) => allowedStd.includes(s));
+  if (effective.length === 0) {
+    effective = [...allowedStd];
+  }
+
+  if (!shouldOmitSeveritiesParam(filterSeverities ?? [], floor)) {
+    const sev = severitiesToApiParam(effective);
     if (sev) {
       q.set("severities", sev);
     }

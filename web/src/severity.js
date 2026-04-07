@@ -4,6 +4,20 @@
  */
 export const SEVERITY_OPTIONS = ["BLOCKER", "HIGH", "MEDIUM", "LOW", "INFO"];
 
+/** 설정·쿼리용 하한 (대소문자 무시, 잘못된 값은 INFO) */
+export function parseSeverityFloor(raw) {
+  if (raw == null || String(raw).trim() === "") return "INFO";
+  const u = String(raw).trim().toUpperCase();
+  return SEVERITY_OPTIONS.includes(u) ? u : "INFO";
+}
+
+/** floor 이상의 표준 severity 목록 (BLOCKER만, … 전체) */
+export function standardSeveritiesAtOrAbove(floor) {
+  const f = parseSeverityFloor(floor);
+  const idx = SEVERITY_OPTIONS.indexOf(f);
+  return SEVERITY_OPTIONS.slice(0, idx + 1);
+}
+
 export const STATUS_OPTIONS = ["OPEN", "CONFIRMED", "RESOLVED"];
 
 /** UI 선택값 → SonarQube `severities` 쿼리 파라미터 */

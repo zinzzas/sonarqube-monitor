@@ -3,13 +3,15 @@
     "id": "api-server",
     "label": "API (Java)",
     "componentKey": "2320-all",
-    "stack": "java"
+    "stack": "java",
+    "severityFloor": "MEDIUM"
   },
   {
     "id": "h1",
     "label": "h1 Web (Vue)",
     "componentKey": "devopsportal-fe",
-    "stack": "vue"
+    "stack": "vue",
+    "severityFloor": "BLOCKER"
   },
   {
     "id": "h2",

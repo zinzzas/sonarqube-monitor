@@ -18,6 +18,7 @@ import {
   displaySeverityForIssue,
   severitiesToApiParam,
   severityPillClassForIssue,
+  standardSeveritiesAtOrAbove,
 } from "../severity.js";
 
 const route = useRoute();
@@ -26,7 +27,8 @@ const router = useRouter();
 /** SonarQube 웹 UI 베이스 (`/api/sonar/config`, 토큰 없음) */
 const sonarBaseUrl = ref("");
 
-const { projectOptions, selectedProjectId, componentKeys } = useComponentProjectSelect();
+const { projectOptions, selectedProjectId, componentKeys, severityFloor } =
+  useComponentProjectSelect();
 
 const pageSize = ref(50);
 /**
@@ -35,6 +37,10 @@ const pageSize = ref(50);
  */
 const sortBySeverity = ref("severity_desc");
 const filterSeverities = ref([...SEVERITY_OPTIONS]);
+/** 프로젝트 `severityFloor` 이하 체크박스는 숨김 */
+const severityOptionsForUi = computed(() =>
+  standardSeveritiesAtOrAbove(severityFloor.value),
+);
 /** 대시보드 집계(metrics)와 동일하게 OPEN만 — 전체 선택 시 Sonar 파라미터 조합으로 0건이 나오는 환경 방지 */
 const filterStatuses = ref(["OPEN"]);
 
@@ -77,6 +83,7 @@ const {
   sortBySeverity,
   severitiesToApiParam,
   filterAuthor,
+  severityFloor,
 });
 
 const severitySortOptions = [
@@ -312,27 +319,38 @@ const showModuleFallbackBanner = computed(
     !loadingMore.value,
 );
 
-/** projectId ↔ selectedProjectId 동기화는 `useComponentProjectSelect`에서 처리 */
+/** projectId ↔ selectedProjectId 동기화는 `useComponentProjectSelect`에서 처리. URL·프로젝트 하한과 교집합. */
 watch(
-  () => [route.query.severities, route.query.severity],
+  () => [
+    route.query.severities,
+    route.query.severity,
+    severityFloor.value,
+    selectedProjectId.value,
+  ],
   () => {
+    const allowed = standardSeveritiesAtOrAbove(severityFloor.value);
     const sevs = route.query.severities;
+    let next = null;
     if (typeof sevs === "string" && sevs.trim()) {
       const arr = sevs
         .split(",")
         .map((s) => s.trim())
         .filter((s) => SEVERITY_OPTIONS.includes(s));
       if (arr.length) {
-        filterSeverities.value = arr;
-        return;
+        const hit = arr.filter((s) => allowed.includes(s));
+        next = hit.length ? hit : null;
       }
     }
-    const sev = route.query.severity;
-    if (typeof sev === "string" && sev && SEVERITY_OPTIONS.includes(sev)) {
-      filterSeverities.value = [sev];
-    } else {
-      filterSeverities.value = [...SEVERITY_OPTIONS];
+    if (next == null) {
+      const sev = route.query.severity;
+      if (typeof sev === "string" && sev && SEVERITY_OPTIONS.includes(sev)) {
+        next = allowed.includes(sev) ? [sev] : null;
+      }
     }
+    if (next == null || next.length === 0) {
+      next = [...allowed];
+    }
+    filterSeverities.value = next;
   },
   { immediate: true },
 );
@@ -443,7 +461,7 @@ function onProjectSelectChange() {
         <div class="filter-grid-row__main">
           <div class="chip-group">
             <label
-              v-for="s in SEVERITY_OPTIONS"
+              v-for="s in severityOptionsForUi"
               :key="s"
               class="chk-chip"
               :class="'chk-chip--' + s.toLowerCase()"

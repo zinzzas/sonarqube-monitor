@@ -30,6 +30,10 @@ from typing import Any
 import httpx
 
 from app.core.config import settings
+from app.core.severity import (
+    parse_severity_floor,
+    sonar_native_severities_for_standard_floor,
+)
 from app.services.sonarqube_client import sonar_client
 
 logger = logging.getLogger(__name__)
@@ -39,7 +43,7 @@ SONAR_ISSUES_MAX_RESULTS = 10_000
 # total만 알기 위한 프로브 — 본 수집 `ps`와 별도(대역폭·불필요한 첫 페이지 폐기 방지)
 PROBE_PAGE_SIZE = 1
 
-# API 필터 값 (Sonar 네이티브 이름)
+# API 필터 값 (Sonar 네이티브 이름) — `app.core.severity.SONAR_NATIVE_SEVERITY_ORDER` 와 동일
 SONAR_SEVERITY_FILTERS: tuple[str, ...] = (
     "BLOCKER",
     "CRITICAL",
@@ -47,6 +51,13 @@ SONAR_SEVERITY_FILTERS: tuple[str, ...] = (
     "MINOR",
     "INFO",
 )
+
+
+def _extra_for_allowed(allowed: tuple[str, ...]) -> dict[str, str]:
+    """전 심각도면 파라미터 생략(Sonar OPEN 전체와 동일). 그 외는 콤마 구분 `severities`."""
+    if allowed == SONAR_SEVERITY_FILTERS:
+        return {}
+    return {"severities": ",".join(allowed)}
 
 _RANGE_START = datetime(2000, 1, 1, tzinfo=timezone.utc)
 
@@ -272,39 +283,50 @@ async def _fetch_one_sonar_severity(component_key: str, sonar_severity: str) -> 
     return linear
 
 
-async def _fetch_by_severity_split(component_key: str) -> list[dict[str, Any]]:
+async def _fetch_by_severity_split(
+    component_key: str,
+    allowed: tuple[str, ...],
+) -> list[dict[str, Any]]:
     acc: list[dict[str, Any]] = []
-    for sv in SONAR_SEVERITY_FILTERS:
+    for sv in allowed:
         chunk = await _fetch_one_sonar_severity(component_key, sv)
         acc.extend(chunk)
         await _sleep_between_pages()
     return _dedupe_by_key(acc)
 
 
-async def _fetch_unfiltered_linear_full(component_key: str) -> list[dict[str, Any]]:
+async def _fetch_linear_full(
+    component_key: str,
+    extra: dict[str, str],
+    allowed: tuple[str, ...],
+) -> list[dict[str, Any]]:
     """프로브에서 total ≤ 10k 가 확인된 뒤, 설정 `ps`로 단일 필터 전량 페이징."""
-    rows, hit_cap = await _fetch_pages_linear(component_key, {}, first_page=None)
+    rows, hit_cap = await _fetch_pages_linear(component_key, extra, first_page=None)
     if hit_cap:
         logger.info(
             "Linear paging hit Sonar window after probe — severity-split.",
         )
-        return await _fetch_by_severity_split(component_key)
+        return await _fetch_by_severity_split(component_key, allowed)
     return rows
 
 
-async def _fetch_unfiltered_unknown_total(component_key: str) -> list[dict[str, Any]]:
+async def _fetch_unknown_total(
+    component_key: str,
+    extra: dict[str, str],
+    allowed: tuple[str, ...],
+) -> list[dict[str, Any]]:
     """프로브에 paging.total 이 없을 때: 본 `ps`로 첫 페이지부터 기존 페이징·상한 감지."""
     ps = settings.sonar_issues_page_size
     max_p = _max_page_index(ps)
 
     try:
-        first = await sonar_client.issues_search(_search_params(component_key, 1))
+        first = await sonar_client.issues_search(_search_params(component_key, 1, extra))
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 400:
             logger.info(
                 "issues/search page 1 returned 400 — using severity-split fetch.",
             )
-            return await _fetch_by_severity_split(component_key)
+            return await _fetch_by_severity_split(component_key, allowed)
         raise
 
     total_n = _paging_total(first)
@@ -314,7 +336,7 @@ async def _fetch_unfiltered_unknown_total(component_key: str) -> list[dict[str, 
             total_n,
             SONAR_ISSUES_MAX_RESULTS,
         )
-        return await _fetch_by_severity_split(component_key)
+        return await _fetch_by_severity_split(component_key, allowed)
 
     issues = list(first.get("issues") or [])
     if len(issues) < ps:
@@ -328,14 +350,14 @@ async def _fetch_unfiltered_unknown_total(component_key: str) -> list[dict[str, 
     p = 2
     while p <= max_p:
         try:
-            data = await sonar_client.issues_search(_search_params(component_key, p))
+            data = await sonar_client.issues_search(_search_params(component_key, p, extra))
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 400:
                 logger.info(
                     "issues/search page %s returned 400 — using severity-split fetch.",
                     p,
                 )
-                return await _fetch_by_severity_split(component_key)
+                return await _fetch_by_severity_split(component_key, allowed)
             raise
         batch = list(data.get("issues") or [])
         all_issues.extend(batch)
@@ -351,21 +373,29 @@ async def _fetch_unfiltered_unknown_total(component_key: str) -> list[dict[str, 
             max_p,
             ps,
         )
-        return await _fetch_by_severity_split(component_key)
+        return await _fetch_by_severity_split(component_key, allowed)
 
     return all_issues
 
 
-async def fetch_all_issues(component_key: str) -> list[dict[str, Any]]:
+async def fetch_all_issues(
+    component_key: str,
+    severity_floor: str = "INFO",
+) -> list[dict[str, Any]]:
     """
     OPEN 이슈 전량. Sonar 10k 제약을 넘기 위해 필요 시 severity·날짜 분할을 사용한다.
 
     먼저 `ps=1` 프로브로 `paging.total`만 읽고(별도 카운트 API 없음), 10k 초과 시
     곧바로 분할 수집해 첫 대량 페이지를 불필요하게 가져오지 않는다.
+
+    `severity_floor` (표준 BLOCKER…INFO): 해당 레벨 **이상**만 수집 (예: MEDIUM → B·H·M).
     """
+    floor = parse_severity_floor(severity_floor)
+    allowed = sonar_native_severities_for_standard_floor(floor)
+    extra = _extra_for_allowed(allowed)
     try:
         probe = await sonar_client.issues_search(
-            _search_params(component_key, 1, page_size=PROBE_PAGE_SIZE)
+            _search_params(component_key, 1, extra, page_size=PROBE_PAGE_SIZE)
         )
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 400:
@@ -373,7 +403,7 @@ async def fetch_all_issues(component_key: str) -> list[dict[str, Any]]:
                 "issues/search probe (ps=%s) returned 400 — severity-split.",
                 PROBE_PAGE_SIZE,
             )
-            return await _fetch_by_severity_split(component_key)
+            return await _fetch_by_severity_split(component_key, allowed)
         raise
 
     total_n = _paging_total(probe)
@@ -387,24 +417,27 @@ async def fetch_all_issues(component_key: str) -> list[dict[str, Any]]:
             total_n,
             SONAR_ISSUES_MAX_RESULTS,
         )
-        return await _fetch_by_severity_split(component_key)
+        return await _fetch_by_severity_split(component_key, allowed)
 
     if total_n is not None and total_n <= SONAR_ISSUES_MAX_RESULTS:
-        return await _fetch_unfiltered_linear_full(component_key)
+        return await _fetch_linear_full(component_key, extra, allowed)
 
-    return await _fetch_unfiltered_unknown_total(component_key)
+    return await _fetch_unknown_total(component_key, extra, allowed)
+
+
+async def fetch_open_issues_for_floor(
+    component_key: str,
+    severity_floor: str = "MEDIUM",
+) -> list[dict[str, Any]]:
+    """
+    OPEN 이슈 중 `severity_floor` 이상(Sonar 네이티브로 OR 필터)만 수집.
+    기본 MEDIUM — 기존 BLOCKER/CRITICAL/MAJOR(B·H·M) 3회 수집과 동일.
+    """
+    floor = parse_severity_floor(severity_floor)
+    allowed = sonar_native_severities_for_standard_floor(floor)
+    return await _fetch_by_severity_split(component_key, allowed)
 
 
 async def fetch_open_issues_blocker_high_medium(component_key: str) -> list[dict[str, Any]]:
-    """
-    OPEN 이슈 중 플랫폼 기준 BLOCKER / HIGH / MEDIUM에 해당하는 것만.
-
-    Sonar `issues/search`는 CRITICAL→HIGH, MAJOR→MEDIUM 매핑 전 원시 심각도로 필터하므로
-    BLOCKER, CRITICAL, MAJOR 세 번 수집 후 key 기준 병합한다.
-    """
-    acc: list[dict[str, Any]] = []
-    for sonar_sv in ("BLOCKER", "CRITICAL", "MAJOR"):
-        chunk = await _fetch_one_sonar_severity(component_key, sonar_sv)
-        acc.extend(chunk)
-        await _sleep_between_pages()
-    return _dedupe_by_key(acc)
+    """호환용 — `fetch_open_issues_for_floor(component_key, \"MEDIUM\")` 와 동일."""
+    return await fetch_open_issues_for_floor(component_key, "MEDIUM")

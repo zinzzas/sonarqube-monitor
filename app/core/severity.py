@@ -15,6 +15,15 @@ from typing import Any
 # 표준 레벨 (순서: 높은 위험 → 낮음)
 STANDARD_SEVERITIES: tuple[str, ...] = ("BLOCKER", "HIGH", "MEDIUM", "LOW", "INFO")
 
+# SonarQube `issues/search` 의 `severities` 값 (표준과 인덱스 1:1 — BLOCKER↔BLOCKER, HIGH↔CRITICAL, …)
+SONAR_NATIVE_SEVERITY_ORDER: tuple[str, ...] = (
+    "BLOCKER",
+    "CRITICAL",
+    "MAJOR",
+    "MINOR",
+    "INFO",
+)
+
 # SonarQube API 응답 값 → 표준 (web/src/severity.js displaySeverity 와 동일)
 FROM_SONAR_API: dict[str, str] = {
     "CRITICAL": "HIGH",
@@ -48,6 +57,31 @@ def normalize_from_sonar(raw: str | None) -> str:
         return ""
     up = str(raw).strip().upper()
     return FROM_SONAR_API.get(up, up)
+
+
+def parse_severity_floor(raw: str | None) -> str:
+    """
+    `component_projects.json` 의 `severityFloor` 등 — 표준 토큰으로 정규화.
+    비어 있거나 알 수 없으면 INFO (필터 없음).
+    """
+    if raw is None:
+        return "INFO"
+    s = str(raw).strip().upper()
+    if not s:
+        return "INFO"
+    if s in STANDARD_SEVERITIES:
+        return s
+    return "INFO"
+
+
+def sonar_native_severities_for_standard_floor(floor: str) -> tuple[str, ...]:
+    """
+    표준 하한(floor) 이상만 Sonar API로 조회할 때 사용.
+    예: MEDIUM → BLOCKER, CRITICAL, MAJOR (HIGH·BLOCKER 포함).
+    """
+    f = parse_severity_floor(floor)
+    idx = STANDARD_SEVERITIES.index(f)
+    return SONAR_NATIVE_SEVERITY_ORDER[: idx + 1]
 
 
 def _severity_rank(token: str) -> int:

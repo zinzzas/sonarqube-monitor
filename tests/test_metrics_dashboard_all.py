@@ -16,7 +16,7 @@ class MetricsDashboardAllTests(unittest.TestCase):
         labels = {"p1": "Alpha", "p2": "Beta"}
 
         with patch(
-            "app.services.metrics_service.fetch_open_issues_blocker_high_medium",
+            "app.services.metrics_service.fetch_open_issues_for_floor",
             new_callable=AsyncMock,
             return_value=[],
         ):

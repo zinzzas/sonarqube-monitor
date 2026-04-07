@@ -18,6 +18,8 @@ from app.config.load_projects import (
     load_component_projects,
     project_labels_map,
     projects_with_keys,
+    severity_floor_for_aggregate_scope,
+    severity_floor_for_full_metrics,
 )
 from app.core.config import settings
 from app.core.module_extract import (
@@ -34,7 +36,7 @@ from app.core.team_high_risk import (
 )
 from app.services.sonarqube_issues_fetch import (
     fetch_all_issues,
-    fetch_open_issues_blocker_high_medium,
+    fetch_open_issues_for_floor,
 )
 
 # 조합된 `/api/metrics/dashboard` 응답 (단일 projectId 또는 all)
@@ -253,7 +255,7 @@ async def _fetch_one_project(
         return pid, row_data, None
 
     try:
-        issues = await fetch_all_issues(ck)
+        issues = await fetch_all_issues(ck, severity_floor_for_full_metrics(row))
     except Exception as e:
         return pid, None, str(e)
     row_data = _build_by_project_row(issues, row, labels_map)
@@ -280,7 +282,10 @@ async def _fetch_one_project_bhm(
         return pid, row_data, None
 
     try:
-        issues = await fetch_open_issues_blocker_high_medium(ck)
+        issues = await fetch_open_issues_for_floor(
+            ck,
+            severity_floor_for_aggregate_scope(row),
+        )
     except Exception as e:
         return pid, None, str(e)
     row_data = _build_by_project_row(issues, row, labels_map)

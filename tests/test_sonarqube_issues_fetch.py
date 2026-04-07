@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, patch
 from app.services.sonarqube_issues_fetch import (
     _fetch_severity_date_shard,
     fetch_all_issues,
+    fetch_open_issues_for_floor,
 )
 
 
@@ -40,6 +41,46 @@ class SonarIssuesFetchTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(out), 5 * 5)  # 5 severities × 5 issues
         self.assertTrue(all("severities" in c for c in calls[1:]))
         self.assertNotIn("severities", calls[0])
+
+    async def test_medium_floor_probe_has_severities(self) -> None:
+        """INFO가 아닌 하한이면 프로브부터 severities 포함."""
+        calls: list[dict[str, str]] = []
+
+        async def fake_search(params: object) -> dict:
+            p = dict(params) if isinstance(params, dict) else {}
+            calls.append(p)
+            if p.get("ps") == "1":
+                self.assertEqual(
+                    p.get("severities"),
+                    "BLOCKER,CRITICAL,MAJOR",
+                )
+                return {"issues": [], "paging": {"total": 0}}
+            return {"issues": [], "paging": {"total": 0}}
+
+        with patch(
+            "app.services.sonarqube_issues_fetch.sonar_client.issues_search",
+            new=AsyncMock(side_effect=fake_search),
+        ):
+            out = await fetch_all_issues("org:proj", "MEDIUM")
+
+        self.assertEqual(out, [])
+        self.assertTrue(calls)
+
+    async def test_fetch_open_floor_high_two_calls(self) -> None:
+        calls: list[str] = []
+
+        async def fake_search(params: object) -> dict:
+            p = dict(params) if isinstance(params, dict) else {}
+            calls.append(str(p.get("severities", "")))
+            return {"issues": [], "paging": {"total": 0}}
+
+        with patch(
+            "app.services.sonarqube_issues_fetch.sonar_client.issues_search",
+            new=AsyncMock(side_effect=fake_search),
+        ):
+            await fetch_open_issues_for_floor("k", "HIGH")
+
+        self.assertEqual([c for c in calls if c], ["BLOCKER", "CRITICAL"])
 
     async def test_under_10k_linear_only(self) -> None:
         async def fake_search(params: object) -> dict:
