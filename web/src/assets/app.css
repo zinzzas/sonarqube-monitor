@@ -1438,10 +1438,10 @@ code {
   box-sizing: border-box;
 }
 
-/* 팀 칩 줄 수·프로젝트별 데이터에 따라 요약 행 높이가 들쭉날쭉하지 않도록 하한 */
+/* 팀 칩 줄 수·프로젝트별 데이터에 따라 요약 행 높이가 들쭉날쭉하지 않도록 하한(과도한 하단 공백 방지) */
 @media (min-width: 720px) {
   .dash-summary > .kpi {
-    min-height: 15.5rem;
+    min-height: 12.75rem;
   }
 }
 
@@ -1617,7 +1617,7 @@ code {
   font-size: 0.84rem;
   line-height: 1.45;
   /* 칩이 한 줄 vs 여러 줄일 때 카드 높이 편차 완화 */
-  min-height: 5.25rem;
+  min-height: 3.75rem;
 }
 
 .kpi__team-chip {
