@@ -63,6 +63,8 @@ function refreshAuthorComboOptions() {
 }
 
 const MODULE_AUTO_FETCH_MAX = 30;
+/** 팀 필터도 클라이언트만 적용 → 모듈과 동일하게 매칭 0건이면 페이지 추가 로드 */
+const TEAM_AUTO_FETCH_MAX = 30;
 
 const {
   items: issues,
@@ -197,14 +199,20 @@ const displayedIssues = computed(() => {
 
 /** 모듈은 API에 넘기지 않고 클라이언트에서만 걸러서, 앞쪽 페이지에 해당 경로 이슈가 없으면 빈 목록이 됨 → 자동 추가 로드 */
 const moduleAutoFetchCount = ref(0);
+const teamAutoFetchCount = ref(0);
 
 function onLoadFirst() {
   moduleAutoFetchCount.value = 0;
+  teamAutoFetchCount.value = 0;
   loadFirst();
 }
 
 watch([moduleFilter, activeProjectId], () => {
   moduleAutoFetchCount.value = 0;
+});
+
+watch([teamFilter, activeProjectId], () => {
+  teamAutoFetchCount.value = 0;
 });
 
 watch(
@@ -253,6 +261,27 @@ watch(
   { flush: "post" },
 );
 
+watch(
+  () => [
+    issues.value,
+    displayedIssues.value,
+    teamFilter.value,
+    hasMore.value,
+    loading.value,
+    loadingMore.value,
+  ],
+  async () => {
+    const t = teamFilter.value;
+    if (!t || loading.value || loadingMore.value) return;
+    if (!hasMore.value || issues.value.length === 0) return;
+    if (displayedIssues.value.length > 0) return;
+    if (teamAutoFetchCount.value >= TEAM_AUTO_FETCH_MAX) return;
+    teamAutoFetchCount.value += 1;
+    await loadMore();
+  },
+  { flush: "post" },
+);
+
 const totalLabel = computed(() => {
   const t = total.value;
   if (t == null) return "전체 건수 미제공";
@@ -270,6 +299,9 @@ const selectedProjectKeyUnset = computed(() => {
 
 const loadStateLabel = computed(() => {
   if (loadingMore.value) return "추가 로딩 중";
+  if (teamFilter.value && !loading.value && issues.value.length && !displayedIssues.value.length && hasMore.value) {
+    return `팀 필터에 맞는 이슈를 찾기 위해 추가 페이지 로드 중 (${teamAutoFetchCount.value}/${TEAM_AUTO_FETCH_MAX})`;
+  }
   if (moduleFilter.value && !loading.value && issues.value.length && !displayedIssues.value.length && hasMore.value) {
     return `모듈 경로에 맞는 이슈를 찾기 위해 추가 페이지 로드 중 (${moduleAutoFetchCount.value}/${MODULE_AUTO_FETCH_MAX})`;
   }

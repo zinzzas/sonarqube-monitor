@@ -50,6 +50,10 @@ const expandedModulePaths = ref(new Set());
 /** `/api/metrics/dashboard`는 프로젝트당 Sonar 순차 호출·이슈 페이징으로 수분 걸릴 수 있음. */
 const DASHBOARD_FETCH_TIMEOUT_MS = 600_000;
 
+/** KPI·팀별 High risk 카드 — Path 기준 팀 매핑 편차 안내 */
+const TEAM_HR_DISCLAIMER =
+  "💡 팀별 매칭 건수는 Path 기준 맵핑 처리되므로 편차가 발생할 수 있습니다.";
+
 const SEV_COLORS = {
   BLOCKER: "#b91c1c",
   HIGH: "#ea580c",
@@ -394,6 +398,14 @@ const highRiskTeamOrderSorted = computed(() => {
 const showTeamHighRiskUi = computed(
   () => teamOrderFromSegmentLabels().length > 0 || highRiskTeamOrder.value.length > 0,
 );
+
+/** 팀 칩·막대가 의미 있을 때(팀 건수 > 0) — 전체 vs 팀 정합 안내 */
+const showTeamHrTeamDisclaimer = computed(() => {
+  if (!showTeamHighRiskUi.value) return false;
+  if ((displaySummary.value?.highRisk ?? 0) <= 0) return false;
+  const byTeam = displayHighRiskByTeam.value;
+  return Object.values(byTeam).some((n) => Number(n) > 0);
+});
 
 /** ALL 제외·componentKey 있는 프로젝트만 이슈 목록 딥링크 */
 const canDeepLinkToIssues = computed(() => {
@@ -939,6 +951,9 @@ async function downloadModuleCsv() {
               }}</strong>
             </button>
           </div>
+          <p v-if="showTeamHrTeamDisclaimer" class="team-hr-disclaimer" role="note">
+            {{ TEAM_HR_DISCLAIMER }}
+          </p>
         </div>
         <div class="kpi kpi--mini">
           <span class="kpi__label">Severity 합계</span>
@@ -1034,6 +1049,13 @@ async function downloadModuleCsv() {
             />
             <p v-else class="chart-empty">데이터 없음</p>
           </div>
+          <p
+            v-if="showTeamHrTeamDisclaimer"
+            class="team-hr-disclaimer team-hr-disclaimer--chart"
+            role="note"
+          >
+            {{ TEAM_HR_DISCLAIMER }}
+          </p>
         </div>
       </div>
 

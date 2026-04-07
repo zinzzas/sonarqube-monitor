@@ -2,7 +2,11 @@
  * 백엔드 `app/core/team_high_risk._path_segments_for_issue` 와 동일한 경로 세그먼트.
  * `module_grouping.json` + `path_tree` / `split_after` 규칙 정합.
  */
-import { extractModuleFromComponent, profileForProject, sonarRelativePath } from "../module.js";
+import {
+  extractModuleFromComponent,
+  profileForProject,
+  sonarRelativePath,
+} from "../module.js";
 
 const TEAM_MATCH_MAX_DEPTH = 32;
 
@@ -125,6 +129,16 @@ export function pathSegmentsForTeamMatch(component, projectId) {
     if (segs.length) return segs;
     const anchor = norm(profile.anchorAfter ?? "");
     if (anchor) return [];
+    return stripOnlyPathSegments(component, profile, TEAM_MATCH_MAX_DEPTH);
+  }
+  if (strategy === "split_after") {
+    const mod = extractModuleFromComponent(component, projectId);
+    if (mod && mod !== "unknown") return [mod];
+    const afterSegs = splitAfterPathSegments(component, profile);
+    if (afterSegs.length) return afterSegs;
+    const path = sonarRelativePath(component);
+    const afterPath = String(profile.after ?? "/fims/");
+    if (path && afterPath && path.indexOf(afterPath) < 0) return [];
     return stripOnlyPathSegments(component, profile, TEAM_MATCH_MAX_DEPTH);
   }
   const mod = extractModuleFromComponent(component, projectId);
