@@ -26,7 +26,7 @@ from app.core.module_extract import (
     module_strategy_for_project,
     profile_id_for_project,
 )
-from app.core.severity import STANDARD_SEVERITIES, normalize_from_sonar
+from app.core.severity import STANDARD_SEVERITIES, severity_bucket_for_issue
 from app.core.team_high_risk import (
     aggregate_high_risk_by_team,
     team_display_order,
@@ -91,15 +91,6 @@ def invalidate_dashboard_cache() -> None:
     _PROJECT_CACHE_BHM.clear()
 
 
-def _severity_key(raw: str | None) -> str:
-    if not raw:
-        return "INFO"
-    n = normalize_from_sonar(raw)
-    if n in STANDARD_SEVERITIES:
-        return n
-    return "INFO"
-
-
 def _empty_severity_row() -> dict[str, int]:
     return {s: 0 for s in STANDARD_SEVERITIES}
 
@@ -113,7 +104,7 @@ def _aggregate_issues(
     chart_stack: dict[str, dict[str, int]] = {}
     for issue in issues:
         comp = issue.get("component") or ""
-        sev = _severity_key(issue.get("severity"))
+        sev = severity_bucket_for_issue(issue)
         severity_total[sev] = severity_total.get(sev, 0) + 1
         for mod in extract_path_keys_for_rollup(comp, project_id):
             if mod not in modules:
@@ -142,7 +133,7 @@ def _issue_export_dict(issue: dict[str, Any], project_id: str, label: str) -> di
     return {
         "projectId": project_id,
         "projectLabel": label,
-        "severity": _severity_key(issue.get("severity")),
+        "severity": severity_bucket_for_issue(issue),
         "moduleBucket": chart_stack_bucket(comp, project_id) or "",
         "component": comp,
         "line": line_out,
@@ -216,7 +207,7 @@ def _build_by_project_row(
     hr_by_team = aggregate_high_risk_by_team(
         issues,
         pid,
-        severity_key_fn=_severity_key,
+        severity_key_fn=severity_bucket_for_issue,
         is_high_risk_fn=lambda s: s in ("BLOCKER", "HIGH"),
     )
     return {

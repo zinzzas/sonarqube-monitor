@@ -116,7 +116,7 @@ def aggregate_high_risk_by_team(
 ) -> dict[str, int]:
     """
     BLOCKER/HIGH 이슈만 카운트, 이슈당 1버킷.
-    severity_key_fn: Sonar severity -> BLOCKER|HIGH|...
+    severity_key_fn: 이슈 dict -> BLOCKER|HIGH|... (표준 버킷)
     is_high_risk_fn: severity str -> bool
     """
     mapping = team_mapping_config()
@@ -135,7 +135,7 @@ def aggregate_high_risk_by_team(
     counts: dict[str, int] = {tid: 0 for tid in dict.fromkeys(team_ids)}
 
     for issue in issues:
-        sev = severity_key_fn(issue.get("severity"))
+        sev = severity_key_fn(issue)
         if not is_high_risk_fn(sev):
             continue
         comp = issue.get("component")

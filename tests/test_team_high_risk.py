@@ -7,6 +7,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
+from app.core.severity import severity_bucket_for_issue
 from app.core.team_high_risk import aggregate_high_risk_by_team
 
 
@@ -72,7 +73,7 @@ class TeamHighRiskSegmentsTests(unittest.TestCase):
             counts = aggregate_high_risk_by_team(
                 issues,
                 "api-server",
-                severity_key_fn=lambda s: str(s or ""),
+                severity_key_fn=severity_bucket_for_issue,
                 is_high_risk_fn=lambda s: s in ("BLOCKER", "HIGH"),
             )
         self.assertEqual(counts.get("team_a", 0), 1, counts)
@@ -85,7 +86,7 @@ class TeamHighRiskSegmentsTests(unittest.TestCase):
             counts = aggregate_high_risk_by_team(
                 issues,
                 "api-server",
-                severity_key_fn=lambda s: str(s or ""),
+                severity_key_fn=severity_bucket_for_issue,
                 is_high_risk_fn=lambda s: s in ("BLOCKER", "HIGH"),
             )
         self.assertEqual(counts.get("team_a", 0), 1, counts)
@@ -97,7 +98,7 @@ class TeamHighRiskSegmentsTests(unittest.TestCase):
             counts = aggregate_high_risk_by_team(
                 issues,
                 "h1",
-                severity_key_fn=lambda s: str(s or ""),
+                severity_key_fn=severity_bucket_for_issue,
                 is_high_risk_fn=lambda s: s in ("BLOCKER", "HIGH"),
             )
         self.assertEqual(counts.get("team_a", 0), 1, counts)
@@ -109,7 +110,7 @@ class TeamHighRiskSegmentsTests(unittest.TestCase):
             counts = aggregate_high_risk_by_team(
                 issues,
                 "legacy",
-                severity_key_fn=lambda s: str(s or ""),
+                severity_key_fn=severity_bucket_for_issue,
                 is_high_risk_fn=lambda s: s in ("BLOCKER", "HIGH"),
             )
         self.assertEqual(counts.get("team_a", 0), 1, counts)
