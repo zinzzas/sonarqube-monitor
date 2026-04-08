@@ -875,7 +875,7 @@ code {
   border-color: var(--border);
 }
 
-/* ----- 로딩 오버레이 (이슈 초기·추가 로드, 대시보드 새로고침): public/load-more-chevron.png ----- */
+/* ----- 로딩 오버레이 (이슈 초기·추가 로드, 대시보드 새로고침·캐시 초기화): public/load-more-chevron.png ----- */
 .load-more-overlay {
   position: fixed;
   inset: 0;
@@ -885,10 +885,20 @@ code {
   justify-content: center;
   padding: 1.5rem;
   pointer-events: none;
-  /* 가운데 로딩 시 배경이 과하게 가려지지 않도록 딤·블러 완화 */
-  background: rgba(15, 23, 42, 0.035);
+  /* 딤: 슬레이트 단색이 아니라 살짝 에메랄드 틴트로 로딩 칩(#fff)과 구분 */
+  background: linear-gradient(
+    165deg,
+    rgba(236, 253, 245, 0.45) 0%,
+    rgba(15, 23, 42, 0.06) 55%,
+    rgba(15, 23, 42, 0.09) 100%
+  );
   -webkit-backdrop-filter: blur(1px);
   backdrop-filter: blur(1px);
+}
+
+/* 캐시 초기화 성공/실패 등 — 하단 버튼 클릭 가능 */
+.load-more-overlay--blocking {
+  pointer-events: auto;
 }
 
 .load-more-overlay__content {
@@ -902,32 +912,66 @@ code {
   box-shadow: none;
 }
 
-/* 게시판 카드·테이블과 동일 토큰: 투명 배경 + 둥근 테두리 */
+.load-more-overlay__content--stack {
+  flex-direction: column;
+  gap: 0.65rem;
+  max-width: min(22rem, 92vw);
+  text-align: center;
+}
+
+/* 로딩 칩: 불투명 흰 배경으로 스크림과 명확히 분리 */
 .load-more-overlay__logo {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0.4rem 0.55rem;
-  background: transparent;
-  border: 1px solid var(--border);
+  padding: 0.3rem 0.48rem;
+  background: #fff;
+  border: 1px solid rgba(5, 150, 105, 0.35);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  box-shadow:
+    0 4px 20px rgba(15, 23, 42, 0.08),
+    0 0 0 1px rgba(255, 255, 255, 0.8) inset;
   animation: load-more-img-float 1.35s ease-in-out infinite;
 }
 
-/* 기존 대비 약 2/3 크기 (7.5→5rem, 12.5→8.33rem, vw/vh 동일 비율) */
+/* 로딩 이미지 — 직전 크기 대비 +50% */
 .load-more-overlay__img {
   display: block;
   width: auto;
   height: auto;
-  max-width: min(5rem, 21.5vw);
-  max-height: min(8.33rem, 25.5vh);
+  max-width: min(2.5rem, 10.8vw);
+  max-height: min(4.17rem, 12.75vh);
   border: none;
   outline: none;
   box-shadow: none;
   object-fit: contain;
   vertical-align: middle;
   background-color: transparent;
+}
+
+.load-more-overlay__caption {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--dashboard-emerald-hover, #047857);
+  letter-spacing: -0.01em;
+  line-height: 1.45;
+}
+
+.load-more-overlay__caption--success {
+  font-weight: 500;
+  color: #0f766e;
+}
+
+.load-more-overlay__caption--err {
+  font-weight: 500;
+  color: #b91c1c;
+  word-break: break-word;
+}
+
+.load-more-overlay__action {
+  margin-top: 0.15rem;
+  align-self: center;
 }
 
 @keyframes load-more-img-float {
@@ -2253,71 +2297,8 @@ code {
   cursor: default;
 }
 
-.dashboard-toolbar-gear--busy {
-  width: auto;
-  min-height: 2.5rem;
-  height: auto;
-  padding: 0.35rem 0.75rem;
-  max-width: min(100%, 18rem);
-}
-
-.dashboard-toolbar-gear__busy-label {
-  display: block;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--dashboard-emerald-hover);
-  line-height: 1.35;
-  text-align: center;
-}
-
-/* 캐시 초기화 — 얼럿 대신 전역 레이어 */
-.dashboard-cache-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 210;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1.5rem;
-  background: rgba(15, 23, 42, 0.055);
-  -webkit-backdrop-filter: blur(1.5px);
-  backdrop-filter: blur(1.5px);
-}
-
-.dashboard-cache-overlay__card {
-  width: 100%;
-  max-width: 22rem;
-  padding: 1.25rem 1.35rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid rgba(5, 150, 105, 0.28);
-  background: var(--card-bg, #fff);
-  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.15);
-}
-
-.dashboard-cache-overlay__title {
-  margin: 0 0 0.5rem;
-  font-size: 1.05rem;
-  font-weight: 600;
-  color: var(--text, #0f172a);
-}
-
-.dashboard-cache-overlay__lead {
-  margin: 0;
-  font-size: 0.95rem;
-  color: var(--text-muted, #64748b);
-  line-height: 1.5;
-}
-
-.dashboard-cache-overlay__err {
-  margin: 0;
-  font-size: 0.9rem;
-  color: #b91c1c;
-  line-height: 1.45;
-  word-break: break-word;
-}
-
-.dashboard-cache-overlay__btn {
-  margin-top: 1rem;
+.dashboard-toolbar-gear__icon--busy {
+  opacity: 0.55;
 }
 
 /* ----- Admin: teamMapping ----- */

@@ -907,7 +907,6 @@ async function downloadModuleCsv() {
         >
           <summary
             class="dashboard-toolbar-gear"
-            :class="{ 'dashboard-toolbar-gear--busy': invalidateCacheState === 'running' }"
             :title="
               invalidateCacheState === 'running' ? '데이터 캐시 초기화 중' : '관리 메뉴'
             "
@@ -916,18 +915,13 @@ async function downloadModuleCsv() {
             "
             :aria-busy="invalidateCacheState === 'running'"
           >
-            <span
-              v-if="invalidateCacheState === 'running'"
-              class="dashboard-toolbar-gear__busy-label"
-              >데이터 캐시 초기화 중…</span
-            >
             <img
-              v-else
               :src="dashboardGearIcon"
               alt=""
               width="22"
               height="22"
               decoding="async"
+              :class="{ 'dashboard-toolbar-gear__icon--busy': invalidateCacheState === 'running' }"
             />
           </summary>
           <div class="dashboard-gear-menu__panel" role="menu">
@@ -1382,14 +1376,21 @@ async function downloadModuleCsv() {
     <Teleport to="body">
       <Transition name="load-more-fade">
         <div
-          v-if="loading && invalidateCacheState !== 'running'"
+          v-if="loading || invalidateCacheState !== 'idle'"
           class="load-more-overlay"
+          :class="{ 'load-more-overlay--blocking': invalidateCacheState !== 'idle' }"
           role="status"
           aria-live="polite"
-          aria-busy="true"
+          :aria-busy="loading || invalidateCacheState === 'running'"
         >
-          <div class="load-more-overlay__content">
-            <div class="load-more-overlay__logo">
+          <div
+            class="load-more-overlay__content"
+            :class="{ 'load-more-overlay__content--stack': invalidateCacheState !== 'idle' }"
+          >
+            <div
+              v-if="loading || invalidateCacheState === 'running'"
+              class="load-more-overlay__logo"
+            >
               <img
                 class="load-more-overlay__img"
                 :src="LOAD_MORE_CHEVRON_SRC"
@@ -1398,41 +1399,30 @@ async function downloadModuleCsv() {
                 fetchpriority="low"
               />
             </div>
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
-
-    <Teleport to="body">
-      <Transition name="load-more-fade">
-        <div
-          v-if="invalidateCacheState !== 'idle'"
-          class="dashboard-cache-overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="dashboard-cache-overlay-title"
-        >
-          <div class="dashboard-cache-overlay__card">
-            <h2 id="dashboard-cache-overlay-title" class="dashboard-cache-overlay__title">
-              <template v-if="invalidateCacheState === 'running'">데이터 캐시 초기화 중…</template>
-              <template v-else-if="invalidateCacheState === 'success'">캐시를 비웠습니다</template>
-              <template v-else>캐시 초기화 실패</template>
-            </h2>
-            <p v-if="invalidateCacheState === 'running'" class="dashboard-cache-overlay__lead">
-              집계·스냅샷을 비우고 최신 Sonar 기준으로 다시 불러옵니다.
-            </p>
-            <p v-else-if="invalidateCacheState === 'success'" class="dashboard-cache-overlay__lead">
-              집계·스냅샷 캐시를 비웠습니다. 화면이 최신 데이터로 갱신되었습니다.
-            </p>
-            <p v-else class="dashboard-cache-overlay__err">{{ invalidateCacheErrorDetail }}</p>
-            <button
-              v-if="invalidateCacheState === 'error'"
-              type="button"
-              class="btn btn--dashboard-refresh dashboard-cache-overlay__btn"
-              @click="dismissCacheInvalidateOverlay"
+            <p
+              v-if="invalidateCacheState === 'running'"
+              class="load-more-overlay__caption"
             >
-              확인
-            </button>
+              캐시 비우는 중…
+            </p>
+            <p
+              v-else-if="invalidateCacheState === 'success'"
+              class="load-more-overlay__caption load-more-overlay__caption--success"
+            >
+              집계·스냅샷 캐시를 비웠습니다. 최신 데이터로 갱신되었습니다.
+            </p>
+            <template v-else-if="invalidateCacheState === 'error'">
+              <p class="load-more-overlay__caption load-more-overlay__caption--err">
+                {{ invalidateCacheErrorDetail }}
+              </p>
+              <button
+                type="button"
+                class="btn btn--dashboard-refresh load-more-overlay__action"
+                @click="dismissCacheInvalidateOverlay"
+              >
+                확인
+              </button>
+            </template>
           </div>
         </div>
       </Transition>
