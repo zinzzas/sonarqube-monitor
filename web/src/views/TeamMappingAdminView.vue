@@ -69,11 +69,13 @@ function applyLoaded(tm) {
       teamId: row?.teamId != null ? String(row.teamId).trim() : "",
       label: row?.label != null ? String(row.label).trim() : "",
     };
-    if (Array.isArray(w.modules) && w.modules.length > 0 && (w.match === "first" || w.match === "any")) {
+    if (Array.isArray(w.modules) && w.modules.length > 0) {
+      const matchMode =
+        w.match === "first" || w.match === "any" ? w.match : /** @type {'any'} */ ("any");
       return {
         ...base,
         modulesStr: modulesToStr(w.modules),
-        matchMode: w.match,
+        matchMode,
       };
     }
     const leg = legacyWhenToForm(w);
