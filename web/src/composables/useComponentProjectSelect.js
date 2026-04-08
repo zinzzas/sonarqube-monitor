@@ -1,6 +1,6 @@
 import { computed, ref, watch } from "vue";
 import { useRoute } from "vue-router";
-import { COMPONENT_PROJECTS } from "../config/componentProjects.js";
+import { componentProjects } from "../config/componentProjects.js";
 import { parseSeverityFloor } from "../severity.js";
 
 /**
@@ -13,7 +13,7 @@ export function useComponentProjectSelect() {
   const route = useRoute();
   const selectedProjectId = ref("");
 
-  const projectOptions = COMPONENT_PROJECTS;
+  const projectOptions = computed(() => componentProjects.value);
 
   /** 라우트와 동기화 — 대시보드에서 `/issues/:projectId` 로 들어올 때 즉시 반영 */
   watch(
@@ -39,7 +39,7 @@ export function useComponentProjectSelect() {
     if (!pid) {
       return "";
     }
-    const row = COMPONENT_PROJECTS.find((p) => p.id === pid);
+    const row = componentProjects.value.find((p) => p.id === pid);
     const key = row?.componentKey?.trim() ?? "";
     return key;
   });
@@ -50,7 +50,7 @@ export function useComponentProjectSelect() {
     if (!pid) {
       return "INFO";
     }
-    const row = COMPONENT_PROJECTS.find((p) => p.id === pid);
+    const row = componentProjects.value.find((p) => p.id === pid);
     const raw = row?.severityFloor;
     if (raw == null || String(raw).trim() === "") {
       return "INFO";

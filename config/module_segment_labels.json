@@ -17,7 +17,7 @@
         "label": "개발2팀",
         "when": {
           "modules": [
-            "external"
+            "shrbatch"
           ],
           "match": "any"
         }
@@ -27,7 +27,7 @@
         "label": "개발3팀",
         "when": {
           "modules": [
-            "domain"
+            "common"
           ],
           "match": "any"
         }

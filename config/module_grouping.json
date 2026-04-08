@@ -17,8 +17,8 @@
       "label": "Java — com.hhi 이후 경로 트리 (롤업·팀 토큰)",
       "strategy": "path_tree",
       "stripPrefixes": [
-        "src/main/java/com/hhi/",
-        "src/main/java/com/hhi",
+        "src/main/java/net/cj/",
+        "src/main/java/net/cj",
         "src/main/java/",
         "src/main/java"
       ],
@@ -26,7 +26,7 @@
       "chartStackAnchorAfter": "",
       "maxDepth": 7,
       "teamMatch": {
-        "pathMustContain": "/com/hhi/",
+        "pathMustContain": "/net/cj/",
         "maxDepth": 32
       }
     },

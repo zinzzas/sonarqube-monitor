@@ -11,7 +11,7 @@ import {
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { Bar, Pie } from "vue-chartjs";
 import { useRouter } from "vue-router";
-import { COMPONENT_PROJECTS } from "../config/componentProjects.js";
+import { componentProjects } from "../config/componentProjects.js";
 import { DASHBOARD_HERO } from "../config/dashboardConfig.js";
 import {
   getModuleTreeDefaultExpandDepth,
@@ -27,6 +27,7 @@ import {
   teamLabelsFromSegmentLabels,
   teamOrderFromSegmentLabels,
 } from "../lib/teamMappingConfig.js";
+import { hydrateComponentProjectsFromApi } from "../config/componentProjects.js";
 import dashboardGearIcon from "../assets/dashboard-gear.svg?url";
 import { LOAD_MORE_CHEVRON_SRC } from "../loadingOverlay.js";
 import { buildDefaultExpandedModulePathSet, visibleModuleTreeRows } from "../moduleTree.js";
@@ -179,13 +180,13 @@ function teamHrColorsByCounts(order, teamCounts) {
 
 const ALL_SCOPE_ID = "all";
 
-const firstProjectId = COMPONENT_PROJECTS[0]?.id ?? "";
+const firstProjectId = componentProjects.value[0]?.id ?? "";
 /** 상단 차트·표 범위 — 기본 첫 프로젝트, `all`이면 전 프로젝트 B·H·M 병합 API */
 const scopeId = ref(firstProjectId);
 
 const projectSelectOptions = computed(() => [
   { id: ALL_SCOPE_ID, label: "전체 (ALL)" },
-  ...COMPONENT_PROJECTS,
+  ...componentProjects.value,
 ]);
 
 const isAllScope = computed(
@@ -330,6 +331,7 @@ async function invalidateServerCache() {
       throw new Error(msg);
     }
     await load();
+    await hydrateComponentProjectsFromApi();
     invalidateCacheState.value = "success";
     clearInvalidateCacheSuccessTimer();
     invalidateCacheSuccessTimer = window.setTimeout(() => {
@@ -368,7 +370,7 @@ function emptySevRow() {
 /** config의 모든 프로젝트 + API 집계 병합 (componentKey 없는 항목도 0으로 노출) */
 const mergedProjectRows = computed(() => {
   const list = byProject.value;
-  return COMPONENT_PROJECTS.map((p) => {
+  return componentProjects.value.map((p) => {
     const row = list.find((b) => b.projectId === p.id);
     if (row) {
       // 표시 라벨은 항상 `component_projects.json`(번들) 기준 — API/백엔드 캐시에 남은 옛 label과 어긋나지 않게 함
@@ -533,7 +535,7 @@ watch(mergedProjectRows, (rows) => {
   if (!rows.length || !scopeId.value) return;
   if (scopeId.value === ALL_SCOPE_ID) return;
   if (!rows.some((r) => r.projectId === scopeId.value)) {
-    scopeId.value = COMPONENT_PROJECTS[0]?.id ?? rows[0].projectId;
+    scopeId.value = componentProjects.value[0]?.id ?? rows[0].projectId;
   }
 });
 

@@ -299,7 +299,7 @@ const hasData = computed(() => !loading.value && !error.value);
 const selectedProjectKeyUnset = computed(() => {
   const id = selectedProjectId.value;
   if (!id) return false;
-  const row = projectOptions.find((p) => p.id === id);
+  const row = projectOptions.value.find((p) => p.id === id);
   return row != null && !String(row.componentKey ?? "").trim();
 });
 
