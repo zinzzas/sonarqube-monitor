@@ -14,9 +14,9 @@ import { useRouter } from "vue-router";
 import { COMPONENT_PROJECTS } from "../config/componentProjects.js";
 import { DASHBOARD_HERO } from "../config/dashboardConfig.js";
 import {
-  getDefaultModuleRowsForProject,
   getModuleTreeDefaultExpandDepth,
   getProfileForProject,
+  sortModuleKeysLikeStackChart,
 } from "../config/moduleGrouping.js";
 import {
   isTreeLabelsEnabledForProject,
@@ -725,7 +725,7 @@ function hasProjectKey(proj) {
 
 function moduleRowsFor(proj) {
   const m = proj.modules || {};
-  const order = getDefaultModuleRowsForProject(proj.projectId);
+  const keys = sortModuleKeysLikeStackChart(m);
   const row = (name) => {
     const counts = emptySevRow();
     if (m[name]) {
@@ -735,12 +735,7 @@ function moduleRowsFor(proj) {
     }
     return { name, counts };
   };
-  const known = order.map((name) => row(name));
-  const extras = Object.keys(m)
-    .filter((k) => !order.includes(k))
-    .sort()
-    .map((name) => row(name));
-  return [...known, ...extras];
+  return keys.map((name) => row(name));
 }
 
 function isPathTreeProject(proj) {
@@ -1211,8 +1206,7 @@ async function downloadModuleCsv() {
               <code>path_tree</code> 모듈 행은 이슈가 잡힌 경로에서만 표시됩니다.
             </template>
             <template v-else>
-              <code>split_after</code> 표시 순: <code>defaults.splitAfterModuleRows</code>(또는 프로필
-              <code>defaultModuleRows</code> 재정의) 뒤에 API에만 있는 키가 붙습니다.
+              <code>split_after</code> 모듈 행 순서는 Module × Severity 스택 막대와 동일하게(집계 건수 내림차순, 동률이면 경로명) 정렬됩니다.
             </template>
           </p>
           <p v-else-if="isPathTreeProject(proj)" class="module-section__hint">

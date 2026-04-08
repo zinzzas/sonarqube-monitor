@@ -31,6 +31,8 @@ flowchart LR
 **Implementation**: `app/core/module_extract.py`, `app/core/module_path_tree.py`  
 **Why**: 집계 키와 차트 축이 **같은 규칙**을 쓰도록 한곳에서만 정의한다.
 
+**미분류 축 이름**: 앵커 미매칭 등으로 내부 토큰이 `unknown`이면, 대시보드·CSV 축에는 `defaults.chartStackUnmappedBucket`(또는 프로필별 `chartStackUnmappedBucket`) 문자열을 쓴다. 팀 매칭 등은 내부적으로 계속 `unknown` 토큰을 사용한다.
+
 ## Metrics pipeline
 
 1. **단일 프로젝트** (`projectId` ≠ `all`): `componentKey`로 Sonar **OPEN 이슈 전량** 수집 — 하한은 `component_projects.json` 의 `severityFloor` → `severity_floor_for_full_metrics` (`sonarqube_issues_fetch.fetch_all_issues`).

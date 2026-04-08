@@ -9,7 +9,7 @@
 | 층 | 도구 | 범위 |
 |----|------|------|
 | 백엔드 | `unittest` | API·도메인·fetch 로직 |
-| 프론트 | (수동/E2E 미구축) | 빌드 `npm run build`로 컴파일 검증 |
+| 프론트 | Vitest (`cd web && npm run test`) | `moduleGrouping` 등 순수 JS — 빌드는 `npm run build` |
 | Sonar 통합 | 수동 | `.env` + 실제 Sonar |
 
 ## Principles

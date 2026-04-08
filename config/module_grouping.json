@@ -2,7 +2,7 @@
   "version": 2,
   "defaultProfile": "vue_src_tree",
   "defaults": {
-    "splitAfterModuleRows": ["auth", "core", "portal", "unknown"],
+    "chartStackUnmappedBucket": "unknown",
     "chartModuleMaxDepth": 3,
     "moduleTreeDefaultExpandDepth": 3
   },
@@ -18,7 +18,7 @@
       "strategy": "path_tree",
       "stripPrefixes": ["src/main/java/", "src/main/java"],
       "anchorAfter": "/fims/",
-      "chartStackAnchorAfter": "/fims/",
+      "chartStackAnchorAfter": "/portal/",
       "maxDepth": 2
     },
     "vue_src_tree": {

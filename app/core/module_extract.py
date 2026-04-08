@@ -99,6 +99,38 @@ def module_strategy_for_project(project_id: str | None) -> str:
     return str(profile.get("strategy") or "split_after")
 
 
+def chart_stack_unmapped_bucket(project_id: str | None) -> str:
+    """
+    앵커 미매칭·경로 부족 등으로 내부 토큰이 'unknown' 일 때 대시보드·CSV에 쓸 축 이름.
+    `profiles.<id>.chartStackUnmappedBucket` 가 있으면 우선, 없으면 `defaults.chartStackUnmappedBucket`, 없으면 'unknown'.
+    """
+    cfg = load_module_grouping()
+    profile = _profile_for_project(project_id)
+    raw = profile.get("chartStackUnmappedBucket")
+    if isinstance(raw, str) and raw.strip():
+        return raw.strip()
+    d = cfg.get("defaults") or {}
+    raw2 = d.get("chartStackUnmappedBucket")
+    if isinstance(raw2, str) and raw2.strip():
+        return raw2.strip()
+    return "unknown"
+
+
+def module_bucket_display_key(raw: str | None, project_id: str | None) -> str | None:
+    """
+    집계·스택·모듈 표에 올릴 키. 내부 분류 실패 토큰 'unknown' 만 표시용 라벨로 치환.
+    extract_module 등은 계속 'unknown' 을 반환(팀 매칭 등과 구분).
+    """
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    if not s:
+        return raw
+    if s == "unknown":
+        return chart_stack_unmapped_bucket(project_id)
+    return s
+
+
 def _looks_like_file(seg: str) -> bool:
     if not seg or "." not in seg:
         return False

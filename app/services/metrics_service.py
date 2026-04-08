@@ -26,6 +26,7 @@ from app.core.config import settings
 from app.core.module_extract import (
     chart_stack_bucket,
     extract_path_keys_for_rollup,
+    module_bucket_display_key,
     module_strategy_for_project,
     profile_id_for_project,
 )
@@ -113,14 +114,16 @@ def _aggregate_issues(
         sev = severity_bucket_for_issue(issue)
         severity_total[sev] = severity_total.get(sev, 0) + 1
         for mod in extract_path_keys_for_rollup(comp, project_id):
-            if mod not in modules:
-                modules[mod] = _empty_severity_row()
-            modules[mod][sev] = modules[mod].get(sev, 0) + 1
+            mod_key = module_bucket_display_key(mod, project_id) or mod
+            if mod_key not in modules:
+                modules[mod_key] = _empty_severity_row()
+            modules[mod_key][sev] = modules[mod_key].get(sev, 0) + 1
         b = chart_stack_bucket(comp, project_id)
         if b is not None and b != "":
-            if b not in chart_stack:
-                chart_stack[b] = _empty_severity_row()
-            chart_stack[b][sev] = chart_stack[b].get(sev, 0) + 1
+            bk = module_bucket_display_key(b, project_id) or b
+            if bk not in chart_stack:
+                chart_stack[bk] = _empty_severity_row()
+            chart_stack[bk][sev] = chart_stack[bk].get(sev, 0) + 1
     return severity_total, modules, chart_stack
 
 
@@ -136,11 +139,12 @@ def _issue_export_dict(issue: dict[str, Any], project_id: str, label: str) -> di
         msg = msg.replace("\r\n", " ").replace("\n", " ").strip()
     line = issue.get("line")
     line_out: int | None = line if isinstance(line, int) else None
+    raw_bucket = chart_stack_bucket(comp, project_id)
     return {
         "projectId": project_id,
         "projectLabel": label,
         "severity": severity_bucket_for_issue(issue),
-        "moduleBucket": chart_stack_bucket(comp, project_id) or "",
+        "moduleBucket": module_bucket_display_key(raw_bucket, project_id) or "",
         "component": comp,
         "line": line_out,
         "message": msg,

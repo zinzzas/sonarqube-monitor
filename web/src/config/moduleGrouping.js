@@ -28,6 +28,36 @@ export function modulePathDepth(path) {
 }
 
 /**
+ * 모듈 행의 OPEN 이슈 건수 합(모든 severity 합).
+ * @param {Record<string, number> | undefined} modRow
+ */
+export function moduleRowTotal(modRow) {
+  if (!modRow || typeof modRow !== "object") return 0;
+  let n = 0;
+  for (const v of Object.values(modRow)) {
+    if (typeof v === "number" && Number.isFinite(v)) n += v;
+  }
+  return n;
+}
+
+/**
+ * Module × Severity 스택 막대(`chartStackModules`)와 동일한 축 순서:
+ * 집계 건수 내림차순, 동률이면 경로/모듈명 localeCompare.
+ * `chart_stack_bucket` / `chartStackAnchorAfter` 로 잡힌 키와 같은 네임스페이스에서 표를 맞춘다.
+ * @param {Record<string, Record<string, number>> | undefined} modMap
+ * @returns {string[]}
+ */
+export function sortModuleKeysLikeStackChart(modMap) {
+  const keys = Object.keys(modMap || {});
+  return keys.sort((a, b) => {
+    const ta = moduleRowTotal(modMap[a]);
+    const tb = moduleRowTotal(modMap[b]);
+    if (tb !== ta) return tb - ta;
+    return a.localeCompare(b);
+  });
+}
+
+/**
  * path_tree / 전역 합산 차트 축: 집계 키 중 깊이 1..maxDepth 만, 트리 순(깊이 → 경로명)
  */
 export function treeChartLabelsUpToDepth(modMap, maxDepth) {
@@ -43,29 +73,6 @@ export function treeChartLabelsUpToDepth(modMap, maxDepth) {
     if (da !== db) return da - db;
     return a.localeCompare(b);
   });
-}
-
-function splitAfterDefaultRowsFromConfig() {
-  const rows = mg.defaults?.splitAfterModuleRows;
-  if (Array.isArray(rows) && rows.length) {
-    return [...rows];
-  }
-  return ["auth", "core", "portal", "unknown"];
-}
-
-/**
- * split_after: `profiles.*.defaultModuleRows` 가 있으면 그걸 쓰고, 없으면 루트 `defaults.splitAfterModuleRows`.
- * path_tree: 항상 [] (행은 집계 키에서만).
- */
-export function getDefaultModuleRowsForProject(projectId) {
-  const profile = getProfileForProject(projectId);
-  if (profile?.strategy === "path_tree") {
-    return [];
-  }
-  if (profile?.defaultModuleRows?.length) {
-    return [...profile.defaultModuleRows];
-  }
-  return splitAfterDefaultRowsFromConfig();
 }
 
 /** `defaults.chartModuleMaxDepth` (기본 3) */
@@ -91,12 +98,11 @@ export function chartsUseTreeDepth(scopeId) {
 /**
  * 차트 축용 모듈 라벨
  * - 전역 / path_tree: 깊이 1..chartModuleMaxDepth (트리 순)
- * - split_after: 설정 순 + API 키
+ * - split_after: 스택 차트와 동일 — 건수 내림차순 → 이름
  * @param {string} scopeId 'global' | 프로젝트 id
  * @param {Record<string, Record<string, number>>} modMap
  */
 export function chartModuleLabelsForScope(scopeId, modMap) {
-  const keys = Object.keys(modMap || {});
   if (scopeId === "global") {
     return treeChartLabelsUpToDepth(modMap, getChartModuleMaxDepth());
   }
@@ -104,13 +110,5 @@ export function chartModuleLabelsForScope(scopeId, modMap) {
   if (profile?.strategy === "path_tree") {
     return treeChartLabelsUpToDepth(modMap, getChartModuleMaxDepth());
   }
-  const order = getDefaultModuleRowsForProject(scopeId);
-  const out = [];
-  for (const name of order) {
-    out.push(name);
-  }
-  for (const k of [...keys].sort()) {
-    if (!order.includes(k)) out.push(k);
-  }
-  return out;
+  return sortModuleKeysLikeStackChart(modMap);
 }

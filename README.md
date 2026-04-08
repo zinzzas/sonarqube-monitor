@@ -80,7 +80,7 @@ SonarQube **OPEN 이슈**를 대시보드(프로젝트·모듈·Severity·팀 Hi
 
    **http://localhost:5173**
 
-   단일 포트로 쓰려면: `npm run build` 후 상위에서 `hatch run start` 등으로 백엔드만 — **`web/dist`가 있어야** 루트에서 SPA가 뜹니다.
+   단일 포트로 쓰려면: `npm run build` 후 상위에서 `hatch run start` 등으로 백엔드만 — **`web/dist`가 있어야** 루트에서 SPA가 뜹니다. 프론트 단위 테스트: `npm run test`(Vitest).
 
 ---
 
