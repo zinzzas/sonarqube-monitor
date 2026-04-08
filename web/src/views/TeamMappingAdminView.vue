@@ -5,11 +5,14 @@ import { setRuntimeTeamMapping } from "../lib/teamIdForIssue.js";
 import { notifyTeamMappingUpdated } from "../lib/teamMappingEvents.js";
 
 /** 서버 GET 진행 중(폼은 `config` 번들로 먼저 채움) */
+/** 페이지 상단 안내 — 설정 파일이 아닌 UI 고정 문구 */
+const TEAM_MAPPING_PAGE_INTRO =
+  "팀별로 등록한 경로 매칭 규칙에 따라 이슈가 그룹핑됩니다.";
+
 const loading = ref(true);
 const saving = ref(false);
 const err = ref("");
 const saveOk = ref("");
-const note = ref("");
 
 /** @type {import('vue').Ref<Array<{ teamId: string; label: string; modulesStr: string; matchMode: 'first' | 'any' }>>} */
 const precedence = ref([]);
@@ -62,7 +65,6 @@ function legacyWhenToForm(w) {
 }
 
 function applyLoaded(tm) {
-  note.value = typeof tm?._note === "string" ? tm._note : "";
   const prec = Array.isArray(tm?.precedence) ? tm.precedence : [];
   precedence.value = prec.map((row) => {
     const w = row?.when && typeof row.when === "object" ? row.when : {};
@@ -285,8 +287,8 @@ onMounted(() => {
     <div v-if="err" class="err" role="alert">{{ err }}</div>
     <div v-if="saveOk" class="admin-team-mapping__ok" role="status">{{ saveOk }}</div>
 
-    <section v-if="note" class="card admin-team-mapping__note" aria-label="설정 메모">
-      <p class="admin-team-mapping__note-text">{{ note }}</p>
+    <section class="card admin-team-mapping__note" aria-label="안내">
+      <p class="admin-team-mapping__note-text">{{ TEAM_MAPPING_PAGE_INTRO }}</p>
     </section>
 
     <section class="card excel-block admin-team-mapping__rules" aria-label="precedence 규칙">
