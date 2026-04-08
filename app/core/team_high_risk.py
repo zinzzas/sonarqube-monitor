@@ -1,7 +1,7 @@
 """HIGH RISK(BLOCKER+HIGH) 이슈를 `module_segment_labels.json` 의 teamMapping 으로 버킷."""
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from app.config.load_module_segment_labels import team_mapping_config
 from app.core.module_extract import (
@@ -129,26 +129,33 @@ def _norm_module_list(raw: list[Any]) -> list[str]:
     return [_norm_seg(x) for x in raw if x]
 
 
-def _match_when(segments: list[str], when: dict[str, Any]) -> bool:
-    if not when:
-        return False
-    seg_l = [_norm_seg(s) for s in segments if s]
-    if not seg_l:
-        return False
+def _coerce_when_match_kind(when: dict[str, Any]) -> Literal["first", "any"]:
+    """
+    신형 teamMapping.when 의 match 정규화.
+    누락·오타·그 외 값은 any (과거: 잘못된 match 로 전 precedence 미매칭 → 전부 fallback).
+    """
+    mk = str(when.get("match") or "").strip().lower()
+    return "first" if mk == "first" else "any"
 
-    # 신규: { "modules": [...], "match": "first"|"any" }
-    if "modules" in when and isinstance(when.get("modules"), list):
-        mods = _norm_module_list(when["modules"])
-        mk = str(when.get("match") or "").strip().lower()
-        if mods and mk == "first":
-            return seg_l[0] in mods
-        if mods and mk == "any":
-            return any(s in mods for s in seg_l)
-        if mods:
-            return False
-        # modules 가 비어 있으면 아래 구형 키로 폴백
 
-    # 구형: firstModule/anyModule 또는 firstSegment/anySegment (둘 다 있으면 OR)
+def _match_new_style_when(seg_l: list[str], when: dict[str, Any]) -> bool | None:
+    """
+    { "modules": [...], "match": "first"|"any" } 만 처리.
+    신형 키가 없거나 modules 가 비어 있으면 None → 구형 when 키로 폴백.
+    """
+    if "modules" not in when or not isinstance(when.get("modules"), list):
+        return None
+    mods = _norm_module_list(when["modules"])
+    if not mods:
+        return None
+    kind = _coerce_when_match_kind(when)
+    if kind == "first":
+        return seg_l[0] in mods
+    return any(s in mods for s in seg_l)
+
+
+def _match_legacy_when(seg_l: list[str], when: dict[str, Any]) -> bool:
+    """구형 firstModule/anyModule·firstSegment/anySegment (둘 다 있으면 OR)."""
     fs = _norm_module_list(_when_str_list(when, "firstModule", "firstSegment"))
     anys = _norm_module_list(_when_str_list(when, "anyModule", "anySegment"))
     if fs and not anys:
@@ -158,6 +165,20 @@ def _match_when(segments: list[str], when: dict[str, Any]) -> bool:
     if fs and anys:
         return seg_l[0] in fs or any(s in anys for s in seg_l)
     return False
+
+
+def _match_when(segments: list[str], when: dict[str, Any]) -> bool:
+    if not when:
+        return False
+    seg_l = [_norm_seg(s) for s in segments if s]
+    if not seg_l:
+        return False
+
+    new_style = _match_new_style_when(seg_l, when)
+    if new_style is not None:
+        return new_style
+
+    return _match_legacy_when(seg_l, when)
 
 
 def team_id_for_path_segments(segments: list[str], mapping: dict[str, Any] | None = None) -> str:

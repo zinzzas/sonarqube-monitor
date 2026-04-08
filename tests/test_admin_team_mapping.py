@@ -80,6 +80,22 @@ class AdminTeamMappingApiTests(unittest.TestCase):
         self.assertEqual(tm["precedence"][0]["when"]["modules"], ["atm", "x"])
         self.assertEqual(tm["precedence"][0]["when"]["match"], "any")
 
+    def test_put_when_omits_match_defaults_to_any(self) -> None:
+        payload = {
+            "precedence": [
+                {
+                    "teamId": "team_z",
+                    "label": "Z",
+                    "when": {"modules": ["p"]},
+                }
+            ],
+            "fallback": {"teamId": "shared", "label": "공통"},
+        }
+        r = self.client.put("/api/admin/team-mapping", json=payload)
+        self.assertEqual(r.status_code, 200, r.text)
+        tm = r.json()["teamMapping"]
+        self.assertEqual(tm["precedence"][0]["when"]["match"], "any")
+
     def test_put_clears_dashboard_response_cache(self) -> None:
         metrics_service._CACHE = {"stub": True}
         metrics_service._CACHE_TS = time.time()

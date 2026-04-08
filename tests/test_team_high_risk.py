@@ -8,7 +8,11 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from app.core.severity import severity_bucket_for_issue
-from app.core.team_high_risk import aggregate_high_risk_by_team, team_id_for_path_segments
+from app.core.team_high_risk import (
+    _coerce_when_match_kind,
+    aggregate_high_risk_by_team,
+    team_id_for_path_segments,
+)
 
 
 def _java_tree_profile() -> dict:
@@ -36,6 +40,17 @@ def _split_after_oob_profile() -> dict:
         "after": "/fims/",
         "segment_index": 99,
     }
+
+
+class CoerceWhenMatchKindTests(unittest.TestCase):
+    def test_first_preserved(self) -> None:
+        self.assertEqual(_coerce_when_match_kind({"match": "first"}), "first")
+        self.assertEqual(_coerce_when_match_kind({"match": "FIRST"}), "first")
+
+    def test_any_and_default_and_typo(self) -> None:
+        self.assertEqual(_coerce_when_match_kind({"match": "any"}), "any")
+        self.assertEqual(_coerce_when_match_kind({}), "any")
+        self.assertEqual(_coerce_when_match_kind({"match": "frist"}), "any")
 
 
 class TeamIdPathSegmentsParityTests(unittest.TestCase):
@@ -74,6 +89,33 @@ class TeamIdPathSegmentsParityTests(unittest.TestCase):
     def test_common_segment_maps_to_team_d(self) -> None:
         tid = team_id_for_path_segments(["portal", "common"], None)
         self.assertEqual(tid, "team_d")
+
+    def test_when_modules_without_match_defaults_to_any(self) -> None:
+        """수동 JSON·구버전: match 키 없을 때 예전엔 전부 미매칭 → fallback. 기본 any 로 규칙 적용."""
+        tm = {
+            "precedence": [
+                {
+                    "teamId": "team_x",
+                    "label": "X",
+                    "when": {"modules": ["atm"]},
+                }
+            ],
+            "fallback": {"teamId": "shared", "label": "ETC"},
+        }
+        self.assertEqual(team_id_for_path_segments(["portal", "atm"], tm), "team_x")
+
+    def test_when_match_typo_defaults_to_any(self) -> None:
+        tm = {
+            "precedence": [
+                {
+                    "teamId": "team_x",
+                    "label": "X",
+                    "when": {"modules": ["atm"], "match": "frist"},
+                }
+            ],
+            "fallback": {"teamId": "shared", "label": "ETC"},
+        }
+        self.assertEqual(team_id_for_path_segments(["portal", "atm"], tm), "team_x")
 
 
 class TeamHighRiskSegmentsTests(unittest.TestCase):

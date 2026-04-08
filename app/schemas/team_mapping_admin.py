@@ -16,7 +16,11 @@ class TeamWhen(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     modules: list[str] = Field(default_factory=list)
-    match_kind: Literal["first", "any"] = Field(alias="match", serialization_alias="match")
+    match_kind: Literal["first", "any"] = Field(
+        default="any",
+        alias="match",
+        serialization_alias="match",
+    )
 
     @field_validator("modules", mode="before")
     @classmethod
