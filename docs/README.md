@@ -42,7 +42,7 @@
 ## 빠른 링크
 
 - [프로젝트 개요](./00_overview/project-overview.md)
-- [아키텍처 요약](./00_overview/architecture-summary.md)
+- [아키텍처 요약](./00_overview/architecture-summary.md) — 스냅샷·캐시·무효화
 - [비즈니스 요구](./01_planning/business-requirements.md)
 - [기능 명세](./02_analysis/functional-spec.md)
 - [API 요구·목록](./02_analysis/api-requirements.md)
@@ -50,5 +50,5 @@
 - [프론트 UI·라우팅](./03_design/frontend-ui.md)
 - [대시보드 → 이슈 목록 딥링크 설계](./03_design/dashboard-issue-deep-links.md)
 - [모듈 세그먼트 라벨](./03_design/module-segment-labels.md)
-- [배포 가이드](./06_release/deployment-guide.md)
+- [배포 가이드](./06_release/deployment-guide.md) — 운영·출시 유의·스모크
 - [대시보드 CSS 패턴](./04_development/web-dashboard-css.md)

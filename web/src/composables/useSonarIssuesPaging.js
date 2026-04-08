@@ -71,6 +71,7 @@ export function useSonarIssuesPaging(refs) {
     severitiesToApiParam,
     filterAuthor,
     severityFloor,
+    filterTeamId,
   } = refs;
 
   /** Ref | ComputedRef | 값 혼용 시에도 안전 */
@@ -84,6 +85,8 @@ export function useSonarIssuesPaging(refs) {
     const floorRaw = severityFloor != null ? unref(severityFloor) : "INFO";
     const severityFloorOut =
       typeof floorRaw === "string" && floorRaw.trim() ? floorRaw.trim() : "INFO";
+    const rawTeam = filterTeamId != null ? unref(filterTeamId) : "";
+    const teamId = typeof rawTeam === "string" ? rawTeam.trim() : "";
     return {
       componentKeys: resolveComponentKey(),
       filterSeverities: unref(filterSeverities),
@@ -92,6 +95,7 @@ export function useSonarIssuesPaging(refs) {
       severitiesToApiParam,
       authorFilter,
       severityFloor: severityFloorOut,
+      teamId,
     };
   }
 

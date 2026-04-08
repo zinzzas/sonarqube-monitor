@@ -82,6 +82,42 @@ def path_segments_for_team_match(component: str | None, project_id: str | None) 
     return _path_segments_for_issue(component, project_id)
 
 
+def issue_component_key(issue: dict[str, Any] | None) -> str:
+    """
+    웹 `issueComponentKey` 와 동일 — Sonar 이슈에서 component 문자열.
+    (일부 응답은 `component` 대신 `mainComponent.key` 만 준다.)
+    """
+    if not issue or not isinstance(issue, dict):
+        return ""
+    c = issue.get("component")
+    if isinstance(c, str) and c.strip():
+        return c.strip()
+    if isinstance(c, dict):
+        mk = c.get("key")
+        if isinstance(mk, str) and mk.strip():
+            return mk.strip()
+    ck = issue.get("componentKey")
+    if isinstance(ck, str) and ck.strip():
+        return ck.strip()
+    main = issue.get("mainComponent")
+    if isinstance(main, str) and main.strip():
+        return main.strip()
+    if isinstance(main, dict):
+        k = main.get("key")
+        if isinstance(k, str) and k.strip():
+            return k.strip()
+    return ""
+
+
+def team_id_for_issue_row(issue: dict[str, Any] | None, project_id: str) -> str:
+    """
+    웹 `teamIdForIssue` 와 동일 규칙 — 경로 세그먼트 + teamMapping.
+    """
+    comp = issue_component_key(issue)
+    segs = path_segments_for_team_match(comp, project_id)
+    return team_id_for_path_segments(segs, team_mapping_config())
+
+
 def _when_str_list(when: dict[str, Any], key: str, legacy_key: str) -> list[Any]:
     v = when.get(key)
     if v is None:
@@ -178,8 +214,7 @@ def aggregate_high_risk_by_team(
         sev = severity_key_fn(issue)
         if not is_high_risk_fn(sev):
             continue
-        comp = issue.get("component")
-        segs = _path_segments_for_issue(comp, project_id)
+        segs = path_segments_for_team_match(issue_component_key(issue), project_id)
         tid = team_id_for_path_segments(segs, mapping)
         counts[tid] = counts.get(tid, 0) + 1
 

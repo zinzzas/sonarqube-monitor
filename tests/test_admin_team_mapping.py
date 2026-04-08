@@ -144,6 +144,32 @@ class AdminTeamMappingApiTests(unittest.TestCase):
             )
             self.assertEqual(r2.status_code, 200)
 
+    def test_post_invalidate_cache_clears_dashboard_cache(self) -> None:
+        metrics_service._CACHE = {"stub": True}
+        metrics_service._CACHE_TS = time.time()
+        metrics_service._DASH_CACHE_PROJECT = "any"
+        metrics_service._PROJECT_CACHE["proj"] = (time.time(), {}, [])
+        metrics_service._PROJECT_CACHE_BHM["proj"] = (time.time(), {}, [])
+        r = self.client.post("/api/admin/invalidate-cache")
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json().get("ok"), True)
+        self.assertIsNone(metrics_service._CACHE)
+        self.assertIsNone(metrics_service._DASH_CACHE_PROJECT)
+        self.assertEqual(len(metrics_service._PROJECT_CACHE), 0)
+        self.assertEqual(len(metrics_service._PROJECT_CACHE_BHM), 0)
+
+    def test_post_invalidate_cache_requires_bearer_when_token_set(self) -> None:
+        from app.core.config import settings
+
+        with patch.object(settings, "admin_team_mapping_token", "secret-token"):
+            r = self.client.post("/api/admin/invalidate-cache")
+            self.assertEqual(r.status_code, 401)
+            r2 = self.client.post(
+                "/api/admin/invalidate-cache",
+                headers={"Authorization": "Bearer secret-token"},
+            )
+            self.assertEqual(r2.status_code, 200)
+
 
 if __name__ == "__main__":
     unittest.main()

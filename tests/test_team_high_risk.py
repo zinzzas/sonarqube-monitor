@@ -154,6 +154,24 @@ class TeamHighRiskSegmentsTests(unittest.TestCase):
             )
         self.assertEqual(counts.get("team_a", 0), 1, counts)
 
+    def test_aggregate_main_component_key_equivalent_to_component(self) -> None:
+        """이슈 목록·스냅샷 teamId 와 동일: `component` 없이 `mainComponent.key` 만 있어도 동일 버킷."""
+        comp = "proj:src/main/java/com/x/fims/portal/domain/Foo.java"
+        with patch("app.core.team_high_risk.profile_for_project", return_value=_java_tree_profile()):
+            c_component = aggregate_high_risk_by_team(
+                [{"component": comp, "severity": "HIGH"}],
+                "api-server",
+                severity_key_fn=severity_bucket_for_issue,
+                is_high_risk_fn=lambda s: s in ("BLOCKER", "HIGH"),
+            )
+            c_main = aggregate_high_risk_by_team(
+                [{"mainComponent": {"key": comp}, "severity": "HIGH"}],
+                "api-server",
+                severity_key_fn=severity_bucket_for_issue,
+                is_high_risk_fn=lambda s: s in ("BLOCKER", "HIGH"),
+            )
+        self.assertEqual(c_component, c_main)
+
     def test_vue_path_tree_domain_under_api(self) -> None:
         comp = "h1:src/api/domain/foo/Bar.vue"
         issues = [{"component": comp, "severity": "BLOCKER"}]

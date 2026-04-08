@@ -140,6 +140,12 @@ def severity_bucket_for_issue(issue: dict[str, Any] | None) -> str:
     return "INFO"
 
 
+def severity_rank_for_sort(issue: dict[str, Any] | None) -> int:
+    """로컬 issues/search 정렬 — `resolve_issue_severity_raw` 토큰 기준 수치."""
+    raw = resolve_issue_severity_raw(issue)
+    return _severity_rank(str(raw).strip().upper())
+
+
 def to_sonar_severity_param(level: str) -> str:
     """UI·표준 단일 값 → API 쿼리용."""
     return TO_SONAR_API_FILTER.get(level, level)

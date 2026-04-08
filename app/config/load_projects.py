@@ -38,6 +38,20 @@ def projects_with_keys() -> list[dict[str, Any]]:
     return out
 
 
+def project_row_by_component_key(component_key: str) -> dict[str, Any] | None:
+    """
+    Sonar `componentKeys` 단일 값과 일치하는 `component_projects.json` 행.
+    이슈 스냅샷(프로젝트 id) 조회에 사용.
+    """
+    ck = str(component_key or "").strip()
+    if not ck:
+        return None
+    for row in load_component_projects():
+        if str(row.get("componentKey") or "").strip() == ck:
+            return row
+    return None
+
+
 def project_labels_map() -> dict[str, str]:
     """대시보드·API 응답 표시용 라벨 — `component_projects.json`의 id → label 단일 출처."""
     out: dict[str, str] = {}

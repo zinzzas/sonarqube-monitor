@@ -2169,6 +2169,57 @@ code {
   gap: 0.5rem;
 }
 
+.dashboard-gear-menu {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.dashboard-gear-menu > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.dashboard-gear-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.dashboard-gear-menu__panel {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  right: 0;
+  z-index: 40;
+  min-width: 15rem;
+  padding: 0.35rem 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(5, 150, 105, 0.28);
+  background: var(--card-bg, #fff);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+}
+
+.dashboard-gear-menu__item {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.55rem 0.9rem;
+  font-size: 0.95rem;
+  color: var(--text, #0f172a);
+  text-decoration: none;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dashboard-gear-menu__item:hover {
+  background: var(--dashboard-emerald-soft);
+  color: var(--dashboard-emerald-hover);
+}
+
+.dashboard-gear-menu__item--btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .dashboard-toolbar-gear {
   display: inline-flex;
   align-items: center;

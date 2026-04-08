@@ -12,9 +12,10 @@
 | GET | `/api/health` | 헬스 |
 | GET | `/api/projects` | `component_projects.json` |
 | GET | `/api/metrics/dashboard` | 집계(요약·byProject·globalModules 등) |
-| GET | `/api/issues/search` | Sonar `issues/search` 프록시(쿼리 전달) |
+| GET | `/api/issues/search` | 스냅샷 있으면 로컬 필터·페이징(대시보드와 동일 이슈 세트); 없으면 Sonar 프록시. `?source=live` 는 항상 Sonar |
 | GET | `/api/sonar/*` | 설정·연결 진단(선택) |
 | GET/PUT | `/api/admin/team-mapping` | 팀 매핑(토큰 보호 시) |
+| POST | `/api/admin/invalidate-cache` | 집계·스냅샷 무효화(팀 매핑 PUT과 동일 효과, 토큰 규칙 동일) |
 
 ## Upstream (SonarQube)
 
@@ -26,8 +27,8 @@
 ## Contract Notes
 
 - **민감값**: 토큰은 `.env`만 — 문서·규칙에 실제 토큰 금지.
-- **이슈 수집**: 대시보드 집계는 서버에서 **전량 페이징**(10k 제약은 서비스 레이어에서 분할).
-- **프록시**: 브라우저는 주로 `/api/issues/search`만 호출하고 Sonar URL은 노출하지 않는 것을 권장.
+- **이슈 수집**: 대시보드 집계는 서버에서 **전량 페이징**(10k 제약은 서비스 레이어에서 분할). 디스크 스냅샷 `manifest.json` 에 `severityFloor` 를 기록해 `component_projects.json` 하한 변경 시 TTL 전에도 스냅샷을 쓰지 않음.
+- **이슈 목록**: 브라우저는 `/api/issues/search`만 호출. 스냅샷 적중 시 Sonar 추가 호출 없이 필터; 내부 전용 `source`·`teamId`는 업스트림에 전달하지 않음.
 
 ## Why
 

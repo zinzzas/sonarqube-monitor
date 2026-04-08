@@ -6,7 +6,8 @@ SonarQube 이슈 전량 수집 후 프로젝트·모듈·Severity 집계.
 - SonarQube 호출은 동시에 여러 건을 날리지 않고, 프로젝트(및 페이징) 단위로 순차(await) 처리.
 - 대시보드는 기본적으로 요청한 projectId 한 건만 집계(고객사 서버 부하 완화).
 - `projectId=all` 이면 전 프로젝트를 순차 집계하되, Sonar는 OPEN·BLOCKER/HIGH/MEDIUM(B·H·M)만 수집.
-- 프로젝트 단위 캐시(전체 집계용 / B·H·M 전용) + 대시보드 응답 캐시(TTL 분리).
+- 프로젝트 단위 메모리 캐시 + 디스크 스냅샷(`issue_snapshot_store`) + 대시보드 응답 캐시(TTL·`severityFloor` 정합).
+- 모듈·차트·CSV 집계는 `issue_component_key`(웹과 동일)로 경로 문자열을 취한다.
 """
 from __future__ import annotations
 
@@ -31,9 +32,11 @@ from app.core.module_extract import (
 from app.core.severity import STANDARD_SEVERITIES, severity_bucket_for_issue
 from app.core.team_high_risk import (
     aggregate_high_risk_by_team,
+    issue_component_key,
     team_display_order,
     team_labels_from_config,
 )
+from app.services import issue_snapshot_coordinator, issue_snapshot_store
 from app.services.sonarqube_issues_fetch import (
     fetch_all_issues,
     fetch_open_issues_for_floor,
@@ -91,6 +94,7 @@ def invalidate_dashboard_cache() -> None:
     _DASH_CACHE_PROJECT = None
     _PROJECT_CACHE.clear()
     _PROJECT_CACHE_BHM.clear()
+    issue_snapshot_store.clear_all_snapshots()
 
 
 def _empty_severity_row() -> dict[str, int]:
@@ -105,7 +109,7 @@ def _aggregate_issues(
     modules: dict[str, dict[str, int]] = {}
     chart_stack: dict[str, dict[str, int]] = {}
     for issue in issues:
-        comp = issue.get("component") or ""
+        comp = issue_component_key(issue)
         sev = severity_bucket_for_issue(issue)
         severity_total[sev] = severity_total.get(sev, 0) + 1
         for mod in extract_path_keys_for_rollup(comp, project_id):
@@ -126,7 +130,7 @@ def _high_risk(severity_total: dict[str, int]) -> int:
 
 def _issue_export_dict(issue: dict[str, Any], project_id: str, label: str) -> dict[str, Any]:
     """엑셀/CSV용 펼친 행 — 집계와 동일 OPEN 이슈."""
-    comp = issue.get("component") or ""
+    comp = issue_component_key(issue)
     msg = issue.get("message") or ""
     if isinstance(msg, str):
         msg = msg.replace("\r\n", " ").replace("\n", " ").strip()
@@ -234,6 +238,7 @@ def _prune_project_cache(valid_ids: set[str]) -> None:
     for k in list(_PROJECT_CACHE_BHM.keys()):
         if k not in valid_ids:
             del _PROJECT_CACHE_BHM[k]
+    issue_snapshot_store.prune_orphan_dirs(valid_ids)
 
 
 async def _fetch_one_project(
@@ -245,6 +250,7 @@ async def _fetch_one_project(
     ck = str(row.get("componentKey") or "").strip()
     now = time.time()
     proj_ttl = settings.metrics_project_cache_ttl_seconds
+    floor_full = severity_floor_for_full_metrics(row)
     entry = _PROJECT_CACHE.get(pid)
     if entry is not None and len(entry) >= 3 and (now - entry[0]) < proj_ttl:
         return pid, entry[1], None
@@ -254,13 +260,35 @@ async def _fetch_one_project(
         _PROJECT_CACHE[pid] = (time.time(), row_data, [])
         return pid, row_data, None
 
-    try:
-        issues = await fetch_all_issues(ck, severity_floor_for_full_metrics(row))
-    except Exception as e:
-        return pid, None, str(e)
-    row_data = _build_by_project_row(issues, row, labels_map)
-    _PROJECT_CACHE[pid] = (time.time(), row_data, issues)
-    return pid, row_data, None
+    snap = issue_snapshot_store.load_issues_if_fresh(
+        pid, "full", proj_ttl, time.time(), expected_severity_floor=floor_full
+    )
+    if snap is not None:
+        row_data = _build_by_project_row(snap, row, labels_map)
+        _PROJECT_CACHE[pid] = (time.time(), row_data, snap)
+        return pid, row_data, None
+
+    lock = issue_snapshot_coordinator.lock_for(pid, "full")
+    async with lock:
+        now2 = time.time()
+        entry2 = _PROJECT_CACHE.get(pid)
+        if entry2 is not None and len(entry2) >= 3 and (now2 - entry2[0]) < proj_ttl:
+            return pid, entry2[1], None
+        snap2 = issue_snapshot_store.load_issues_if_fresh(
+            pid, "full", proj_ttl, time.time(), expected_severity_floor=floor_full
+        )
+        if snap2 is not None:
+            row_data = _build_by_project_row(snap2, row, labels_map)
+            _PROJECT_CACHE[pid] = (time.time(), row_data, snap2)
+            return pid, row_data, None
+        try:
+            issues = await fetch_all_issues(ck, floor_full)
+        except Exception as e:
+            return pid, None, str(e)
+        issue_snapshot_store.save_issues(pid, "full", issues, ck, severity_floor=floor_full)
+        row_data = _build_by_project_row(issues, row, labels_map)
+        _PROJECT_CACHE[pid] = (time.time(), row_data, issues)
+        return pid, row_data, None
 
 
 async def _fetch_one_project_bhm(
@@ -272,6 +300,7 @@ async def _fetch_one_project_bhm(
     ck = str(row.get("componentKey") or "").strip()
     now = time.time()
     proj_ttl = settings.metrics_project_cache_ttl_seconds
+    floor_bhm = severity_floor_for_aggregate_scope(row)
     entry = _PROJECT_CACHE_BHM.get(pid)
     if entry is not None and len(entry) >= 3 and (now - entry[0]) < proj_ttl:
         return pid, entry[1], None
@@ -281,16 +310,35 @@ async def _fetch_one_project_bhm(
         _PROJECT_CACHE_BHM[pid] = (time.time(), row_data, [])
         return pid, row_data, None
 
-    try:
-        issues = await fetch_open_issues_for_floor(
-            ck,
-            severity_floor_for_aggregate_scope(row),
+    snap = issue_snapshot_store.load_issues_if_fresh(
+        pid, "bhm", proj_ttl, time.time(), expected_severity_floor=floor_bhm
+    )
+    if snap is not None:
+        row_data = _build_by_project_row(snap, row, labels_map)
+        _PROJECT_CACHE_BHM[pid] = (time.time(), row_data, snap)
+        return pid, row_data, None
+
+    lock = issue_snapshot_coordinator.lock_for(pid, "bhm")
+    async with lock:
+        now2 = time.time()
+        entry2 = _PROJECT_CACHE_BHM.get(pid)
+        if entry2 is not None and len(entry2) >= 3 and (now2 - entry2[0]) < proj_ttl:
+            return pid, entry2[1], None
+        snap2 = issue_snapshot_store.load_issues_if_fresh(
+            pid, "bhm", proj_ttl, time.time(), expected_severity_floor=floor_bhm
         )
-    except Exception as e:
-        return pid, None, str(e)
-    row_data = _build_by_project_row(issues, row, labels_map)
-    _PROJECT_CACHE_BHM[pid] = (time.time(), row_data, issues)
-    return pid, row_data, None
+        if snap2 is not None:
+            row_data = _build_by_project_row(snap2, row, labels_map)
+            _PROJECT_CACHE_BHM[pid] = (time.time(), row_data, snap2)
+            return pid, row_data, None
+        try:
+            issues = await fetch_open_issues_for_floor(ck, floor_bhm)
+        except Exception as e:
+            return pid, None, str(e)
+        issue_snapshot_store.save_issues(pid, "bhm", issues, ck, severity_floor=floor_bhm)
+        row_data = _build_by_project_row(issues, row, labels_map)
+        _PROJECT_CACHE_BHM[pid] = (time.time(), row_data, issues)
+        return pid, row_data, None
 
 
 def _merge_severity_totals_from_rows(rows: list[dict[str, Any]]) -> dict[str, int]:

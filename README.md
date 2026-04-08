@@ -48,6 +48,9 @@ SonarQube **OPEN 이슈**를 대시보드(프로젝트·모듈·Severity·팀 Hi
    | `SONAR_ISSUES_PAGE_SIZE` | (선택) 기본 `200`, 최대 `500` 등 |
    | `SONAR_ISSUES_PAGE_DELAY_MS` | (선택) 페이징 간 지연(ms) |
    | `SONAR_HTTP_*` | (선택) 연결·타임아웃 등 |
+   | `METRICS_PROJECT_CACHE_TTL_SECONDS` | (선택) 대시보드·이슈 스냅샷 TTL(초), 기본 `3600`(1시간) |
+   | `METRICS_DASHBOARD_CACHE_TTL_SECONDS` | (선택) `/api/metrics/dashboard` 조합 응답 TTL(초), 기본 `3600` |
+   | `ISSUES_SEARCH_FROM_SNAPSHOT` | (선택) `true`면 스냅샷이 있을 때 `/api/issues/search` 를 로컬 필터(기본 `true`) |
 
    나머지(`SONAR_AUTH`, `SONAR_PROXY` 등)는 `.env` 주석 참고.
 
@@ -117,9 +120,14 @@ Hatch 사용 시: `hatch run dev` (Windows와 동일). `.env`는 위 표와 같�
 
 ## API 예시
 
-`GET /api/health` · `GET /api/metrics/dashboard` · `GET /api/issues/search` (Sonar 프록시)
+`GET /api/health` · `GET /api/metrics/dashboard` · `GET /api/issues/search`
 
-전체: [docs/02_analysis/api-requirements.md](docs/02_analysis/api-requirements.md)
+- **집계·스냅샷**: 대시보드가 프로젝트별 Sonar 이슈를 수집하면 `data/issue_snapshots/<projectId>/` 에 JSON 스냅샷이 쌓인다(TTL 동안 재사용). `manifest.json` 의 `severityFloor` 가 `component_projects.json` 과 다르면 TTL 전에도 폐기 후 재수집.
+- **이슈 목록**: 스냅샷이 있으면 동일 데이터로 필터·페이징(정렬 `s`·`teamId` 등); 없거나 `?source=live` 면 Sonar 프록시.
+
+전체: [docs/02_analysis/api-requirements.md](docs/02_analysis/api-requirements.md) · 아키텍처·스냅샷: [docs/00_overview/architecture-summary.md](docs/00_overview/architecture-summary.md), [docs/03_design/system-architecture.md](docs/03_design/system-architecture.md)
+
+**출시·운영**: [docs/06_release/deployment-guide.md](docs/06_release/deployment-guide.md) (문서 하단 «운영·출시 시 유의»).
 
 ---
 

@@ -36,6 +36,7 @@ function shouldOmitSeveritiesParam(filterSeverities, severityFloor) {
  * @param {(s: string[]) => string} args.severitiesToApiParam
  * @param {string} [args.authorFilter] Sonar `authors` (SCM 로그인, 콤마 구분 복수 가능)
  * @param {string} [args.severityFloor] component_projects `severityFloor` — INFO면 기존 동작, 그 외는 하한 이상만 API 요청
+ * @param {string} [args.teamId] 스냅샷 조회 시 서버 팀 필터(웹 `teamIdForIssue` 와 동일 규칙). Sonar 업스트림에는 전달하지 않음(프록시에서 제거).
  * @returns {URLSearchParams}
  */
 export function buildSonarIssuesSearchParams(args) {
@@ -49,6 +50,7 @@ export function buildSonarIssuesSearchParams(args) {
     severitiesToApiParam,
     authorFilter,
     severityFloor,
+    teamId,
   } = args;
 
   const q = new URLSearchParams();
@@ -66,6 +68,11 @@ export function buildSonarIssuesSearchParams(args) {
   const auth = typeof authorFilter === "string" ? authorFilter.trim() : "";
   if (auth) {
     q.set("authors", auth);
+  }
+
+  const tid = typeof teamId === "string" ? teamId.trim() : "";
+  if (tid) {
+    q.set("teamId", tid);
   }
 
   const floor = severityFloor ?? "INFO";

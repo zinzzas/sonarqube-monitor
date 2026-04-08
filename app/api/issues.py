@@ -2,6 +2,10 @@ from typing import Any
 
 from fastapi import APIRouter, Request
 
+from app.services.issue_snapshot_query import (
+    strip_internal_query_params,
+    try_issue_search_from_snapshot,
+)
 from app.services.sonar_api import collect_issues_search_params, proxy_issues_search
 
 router = APIRouter(tags=["issues"])
@@ -55,11 +59,16 @@ def _normalize_sonar_issues_search(data: dict[str, Any]) -> dict[str, Any]:
 @router.get("/issues/search")
 async def issues_search(request: Request) -> dict:
     """
-    SonarQube `GET /api/issues/search` 프록시.
-    쿼리스트링 전달; `componentKeys` 없으면 `SONAR_SAMPLE_COMPONENT_KEYS` 사용.
+    이슈 검색: 스냅샷(대시보드 집계와 동일 `issues_full`)이 있으면 로컬 필터·페이징.
+    없거나 미지원이면 Sonar `GET /api/issues/search` 프록시.
+    `?source=live` 는 항상 Sonar. 내부 파라미터 `source` 는 업스트림에 전달하지 않음.
     """
     params = collect_issues_search_params(request)
-    raw = await proxy_issues_search(params)
+    local = try_issue_search_from_snapshot(params)
+    if local is not None:
+        return _normalize_sonar_issues_search(local)
+    upstream = strip_internal_query_params(params)
+    raw = await proxy_issues_search(upstream)
     if isinstance(raw, dict):
         return _normalize_sonar_issues_search(raw)
     return raw

@@ -69,3 +69,16 @@ def put_team_mapping(body: TeamMappingUpdate) -> dict[str, Any]:
     except OSError as e:
         raise HTTPException(status_code=500, detail=f"파일 저장 실패: {e}") from e
     return {"ok": True, "teamMapping": stored}
+
+
+@router.post(
+    "/admin/invalidate-cache",
+    dependencies=[Depends(_require_admin_bearer)],
+)
+def post_invalidate_cache() -> dict[str, Any]:
+    """
+    메모리 집계 캐시 + 이슈 스냅샷 디렉터리 제거 — 팀 매핑 저장과 동일한 무효화.
+    `component_projects.json` 의 severityFloor 등을 바꾼 뒤에도 호출하면 다음 요청이 Sonar 기준으로 다시 채움.
+    """
+    invalidate_dashboard_cache()
+    return {"ok": True}

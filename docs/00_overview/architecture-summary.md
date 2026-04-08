@@ -22,11 +22,22 @@
 ```
 main.py              # FastAPI, /api 우선, web/dist 있으면 SPA
 app/api/             # health, metrics, issues, projects, sonar 진단, admin
-app/services/        # sonarqube_client, sonar_api, metrics_service, sonarqube_issues_fetch
+app/services/        # metrics_service, sonarqube_issues_fetch, issue_snapshot_store,
+                     # issue_snapshot_query, issue_snapshot_coordinator, sonar_api, …
 app/core/            # config, severity, module_extract, team_high_risk, …
 config/              # component_projects, module_grouping, module_segment_labels, dashboard
+data/issue_snapshots/# 런타임 디스크 캐시(기본, .gitignore) — 집계·이슈 목록 정합
 web/src/             # DashboardView, IssueListView, app.css, router
 ```
+
+## 데이터 흐름 (요약)
+
+| 층 | 역할 |
+|----|------|
+| Sonar API | OPEN 이슈 수집(페이징·10k 분할은 `sonarqube_issues_fetch`) |
+| 메모리 | 프로젝트별 집계 결과 + 조합된 대시보드 응답 — TTL |
+| 디스크 | 프로젝트별 `issues_full` / `issues_bhm` + `manifest.json`(`severityFloor`) — TTL·floor 불일치 시 폐기 |
+| 무효화 | 팀 매핑 PUT · `POST /api/admin/invalidate-cache` · 서버 재시작(메모리만 초기화, 디스크는 TTL/floor) |
 
 ## Severity 표준
 

@@ -30,6 +30,12 @@ const sonarBaseUrl = ref("");
 const { projectOptions, selectedProjectId, componentKeys, severityFloor } =
   useComponentProjectSelect();
 
+/** 대시보드 팀 칩 딥링크 — 스냅샷 시 `/api/issues/search?teamId=` 로 서버 필터(클라이언트 `teamIdForIssue` 와 동일 규칙) */
+const teamFilter = computed(() => {
+  const t = route.query.teamId;
+  return typeof t === "string" && t.trim() ? t.trim() : "";
+});
+
 const pageSize = ref(50);
 /**
  * 기본: Severity 높은 순 — 대시보드처럼 전량 집계가 아니라 첫 페이지만 보므로,
@@ -86,6 +92,7 @@ const {
   severitiesToApiParam,
   filterAuthor,
   severityFloor,
+  filterTeamId: teamFilter,
 });
 
 const severitySortOptions = [
@@ -156,12 +163,6 @@ function issueRowStableKey(row, idx) {
 const moduleFilter = computed(() => {
   const m = route.query.module;
   return typeof m === "string" && m ? m : "";
-});
-
-/** 대시보드 팀 칩 딥링크 — Sonar API 비지원, 클라이언트 필터 */
-const teamFilter = computed(() => {
-  const t = route.query.teamId;
-  return typeof t === "string" && t.trim() ? t.trim() : "";
 });
 
 const activeProjectId = computed(() => selectedProjectId.value || String(route.params.projectId || ""));

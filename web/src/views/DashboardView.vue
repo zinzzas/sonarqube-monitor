@@ -37,6 +37,8 @@ ChartJS.register(ArcElement, BarElement, CategoryScale, LinearScale, Tooltip, Le
 const router = useRouter();
 
 const loading = ref(true);
+/** 톱니 메뉴(`<details>`) — 캐시 초기화 후 닫기 */
+const gearMenuRef = ref(null);
 /** Module×Severity — 이슈 펼침 CSV 생성 중 */
 const exportingModuleCsv = ref(false);
 const err = ref("");
@@ -262,6 +264,42 @@ async function load() {
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
     loading.value = false;
+  }
+}
+
+function closeGearMenu() {
+  const el = gearMenuRef.value;
+  if (el && "open" in el) el.open = false;
+}
+
+async function invalidateServerCache() {
+  try {
+    const headers = { "Content-Type": "application/json" };
+    const t = sessionStorage.getItem("adminTeamMappingToken");
+    if (t) headers.Authorization = `Bearer ${t}`;
+    const res = await fetch("/api/admin/invalidate-cache", {
+      method: "POST",
+      headers,
+    });
+    if (!res.ok) {
+      let msg = res.statusText;
+      try {
+        const body = await res.json();
+        const d = body?.detail;
+        msg = typeof d === "string" ? d : JSON.stringify(d ?? msg);
+      } catch {
+        const text = await res.text();
+        if (text) msg = text;
+      }
+      throw new Error(msg);
+    }
+    closeGearMenu();
+    window.alert(
+      "집계·스냅샷 캐시를 비웠습니다. 곧 최신 Sonar 기준으로 다시 불러옵니다.",
+    );
+    await load();
+  } catch (e) {
+    window.alert(String(e?.message || e));
   }
 }
 
@@ -840,19 +878,40 @@ async function downloadModuleCsv() {
         </p>
       </div>
       <div class="dashboard__toolbar-right dashboard__toolbar-right--with-gear">
-        <router-link
-          class="dashboard-toolbar-gear"
-          :to="{ name: 'adminTeamMapping' }"
-          title="표준서비스 팀 매칭"
-        >
-          <img
-            :src="dashboardGearIcon"
-            alt="표준서비스 팀 매칭"
-            width="22"
-            height="22"
-            decoding="async"
-          />
-        </router-link>
+        <details ref="gearMenuRef" class="dashboard-gear-menu">
+          <summary
+            class="dashboard-toolbar-gear"
+            title="관리 메뉴"
+            aria-label="관리 메뉴 열기"
+          >
+            <img
+              :src="dashboardGearIcon"
+              alt=""
+              width="22"
+              height="22"
+              decoding="async"
+            />
+          </summary>
+          <div class="dashboard-gear-menu__panel" role="menu">
+            <router-link
+              class="dashboard-gear-menu__item"
+              :to="{ name: 'adminTeamMapping' }"
+              role="menuitem"
+              @click="closeGearMenu"
+            >
+              표준서비스 팀 매칭
+            </router-link>
+            <button
+              type="button"
+              class="dashboard-gear-menu__item dashboard-gear-menu__item--btn"
+              role="menuitem"
+              :disabled="loading"
+              @click="invalidateServerCache"
+            >
+              집계·스냅샷 캐시 초기화
+            </button>
+          </div>
+        </details>
         <button
           class="btn btn--dashboard-refresh"
           type="button"

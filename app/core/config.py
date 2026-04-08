@@ -52,12 +52,26 @@ class Settings(BaseSettings):
     `off`: 미출력. `info`: 요청/응답 한 줄. `debug`: 쿼리·curl·본문 요약.
     """
 
-    metrics_project_cache_ttl_seconds: float = 120.0
-    """대시보드 집계 시 프로젝트별 Sonar 이슈 결과 캐시 TTL(초)."""
-    metrics_dashboard_cache_ttl_seconds: float = 90.0
-    """조합된 `/api/metrics/dashboard` 전체 응답 캐시 TTL(초)."""
+    metrics_project_cache_ttl_seconds: float = 3600.0
+    """대시보드 집계 시 프로젝트별 Sonar 이슈 결과·디스크 스냅샷 신선도 TTL(초). 기본 1시간."""
+    metrics_dashboard_cache_ttl_seconds: float = 3600.0
+    """조합된 `/api/metrics/dashboard` 전체 응답 캐시 TTL(초). 기본 1시간."""
     metrics_sonar_max_concurrent: int = 4
     """예약: 현재 집계는 프로젝트·페이지 순차 처리만 사용. 병렬 확장 시 상한으로 쓸 수 있음."""
+
+    issue_snapshot_dir: Path = Field(
+        default_factory=lambda: _PROJECT_ROOT / "data" / "issue_snapshots",
+    )
+    """
+    대시보드 집계용 Sonar 이슈 스냅샷(JSON) 디렉터리.
+    프로젝트별 하위 폴더 — 롤아웃 1단계: `metrics_service` 캐시 미스 시 디스크 조회·갱신.
+    """
+
+    issues_search_from_snapshot: bool = True
+    """
+    True: `GET /api/issues/search` 는 스냅샷이 있으면 Sonar 대신 로컬 필터·페이징.
+    False: 항상 Sonar 프록시(롤백). `?source=live` 는 항상 Sonar.
+    """
 
     admin_team_mapping_token: str = ""
     """
