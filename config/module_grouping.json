@@ -14,12 +14,21 @@
       "segment_index": 0
     },
     "java_tree": {
-      "label": "Java — com/**/ 패키지 이후 경로 트리 (롤업)",
+      "label": "Java — com.hhi 이후 경로 트리 (롤업·팀 토큰)",
       "strategy": "path_tree",
-      "stripPrefixes": ["src/main/java/", "src/main/java"],
-      "anchorAfter": "/fims/",
-      "chartStackAnchorAfter": "/portal/",
-      "maxDepth": 2
+      "stripPrefixes": [
+        "src/main/java/com/hhi/",
+        "src/main/java/com/hhi",
+        "src/main/java/",
+        "src/main/java"
+      ],
+      "anchorAfter": "",
+      "chartStackAnchorAfter": "",
+      "maxDepth": 7,
+      "teamMatch": {
+        "pathMustContain": "/com/hhi/",
+        "maxDepth": 32
+      }
     },
     "vue_src_tree": {
       "label": "Vue — src/ 이후 경로 트리 (롤업)",

@@ -40,6 +40,25 @@ def _vue_empty_anchor_profile() -> dict:
     }
 
 
+def _java_tree_hhi_production_profile() -> dict:
+    """`config/module_grouping.json` java_tree 와 동형 — com.hhi 이후 토큰, 팀만 pathMustContain."""
+    return {
+        "strategy": "path_tree",
+        "stripPrefixes": [
+            "src/main/java/com/hhi/",
+            "src/main/java/com/hhi",
+            "src/main/java/",
+            "src/main/java",
+        ],
+        "anchorAfter": "",
+        "maxDepth": 7,
+        "teamMatch": {
+            "pathMustContain": "/com/hhi/",
+            "maxDepth": 32,
+        },
+    }
+
+
 def _split_after_default_profile() -> dict:
     return {
         "strategy": "split_after",
@@ -114,6 +133,66 @@ class PathSegmentsForTeamMatchTests(unittest.TestCase):
         with patch("app.core.team_high_risk.profile_for_project", return_value=_vue_empty_anchor_profile()):
             segs = path_segments_for_team_match(comp, "h1")
         self.assertIn("domain", segs)
+
+    def test_java_hhi_strip_com_module_segment(self) -> None:
+        comp = (
+            "api:src/main/java/com/hhi/hihr/com/auth/controller/ComAuthController.java"
+        )
+        with patch(
+            "app.core.team_high_risk.profile_for_project",
+            return_value=_java_tree_hhi_production_profile(),
+        ):
+            segs = path_segments_for_team_match(comp, "api-server")
+        self.assertIn("com", segs)
+        self.assertIn("hihr", segs)
+
+    def test_java_hhi_strip_atm_module_segment(self) -> None:
+        comp = (
+            "api:src/main/java/com/hhi/hihr/atm/annualmonthlyleaveplanaccrual/controller/"
+            "AnnualLeaveAccrualApplicationController.java"
+        )
+        with patch(
+            "app.core.team_high_risk.profile_for_project",
+            return_value=_java_tree_hhi_production_profile(),
+        ):
+            segs = path_segments_for_team_match(comp, "api-server")
+        self.assertIn("atm", segs)
+
+    def test_java_path_must_contain_gate_no_hhi_returns_empty(self) -> None:
+        comp = "api:src/main/java/com/acme/portal/Foo.java"
+        with patch(
+            "app.core.team_high_risk.profile_for_project",
+            return_value=_java_tree_hhi_production_profile(),
+        ):
+            segs = path_segments_for_team_match(comp, "api-server")
+        self.assertEqual(segs, [])
+
+    def test_java_fims_without_com_hhi_not_team_segments(self) -> None:
+        """레거시 fims 경로만 있고 com/hhi 가 없으면 게이트에서 제외."""
+        comp = "p:src/main/java/com/x/fims/portal/domain/Foo.java"
+        with patch(
+            "app.core.team_high_risk.profile_for_project",
+            return_value=_java_tree_hhi_production_profile(),
+        ):
+            segs = path_segments_for_team_match(comp, "x")
+        self.assertEqual(segs, [])
+
+    def test_team_match_max_depth_override_deep_token(self) -> None:
+        """롤업 maxDepth(2)로는 잘리는 토큰도 teamMatch.maxDepth 로 팀 매칭에 포함."""
+        prof = {
+            "strategy": "path_tree",
+            "stripPrefixes": ["src/main/java/", "src/main/java"],
+            "anchorAfter": "",
+            "maxDepth": 2,
+            "teamMatch": {
+                "pathMustContain": "/com/hhi/",
+                "maxDepth": 8,
+            },
+        }
+        comp = "p:src/main/java/com/hhi/a/b/c/deepmodule/x/Foo.java"
+        with patch("app.core.team_high_risk.profile_for_project", return_value=prof):
+            segs = path_segments_for_team_match(comp, "x")
+        self.assertIn("deepmodule", segs)
 
 
 class SplitAfterTeamSegmentsTests(unittest.TestCase):

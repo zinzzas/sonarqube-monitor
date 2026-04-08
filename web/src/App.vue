@@ -1,4 +1,23 @@
-<script setup></script>
+<script setup>
+import { onMounted, onUnmounted } from "vue";
+import { scheduleTeamMappingHydrate } from "./lib/teamIdForIssue.js";
+import { TEAM_MAPPING_UPDATED_EVENT } from "./lib/teamMappingEvents.js";
+
+/** 자식 라우트(이슈 목록) mounted·watch 보다 먼저 실행되도록 setup 최상단에서 시작 */
+scheduleTeamMappingHydrate();
+
+function onTeamMappingUpdated() {
+  scheduleTeamMappingHydrate();
+}
+
+onMounted(() => {
+  window.addEventListener(TEAM_MAPPING_UPDATED_EVENT, onTeamMappingUpdated);
+});
+
+onUnmounted(() => {
+  window.removeEventListener(TEAM_MAPPING_UPDATED_EVENT, onTeamMappingUpdated);
+});
+</script>
 
 <template>
   <div class="app">

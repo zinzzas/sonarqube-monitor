@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
 import segmentLabels from "../../../config/module_segment_labels.json";
+import { setRuntimeTeamMapping } from "../lib/teamIdForIssue.js";
 import { notifyTeamMappingUpdated } from "../lib/teamMappingEvents.js";
 
 /** 서버 GET 진행 중(폼은 `config` 번들로 먼저 채움) */
@@ -151,6 +152,7 @@ async function load(options = {}) {
     }
     showTokenPanel.value = false;
     applyLoaded(data.teamMapping);
+    setRuntimeTeamMapping(data.teamMapping);
   } catch (e) {
     err.value = `${String(e?.message || e)} — 아래 폼은 번들된 JSON 기준입니다.`;
   } finally {
@@ -187,6 +189,7 @@ async function save() {
       return;
     }
     applyLoaded(data.teamMapping);
+    setRuntimeTeamMapping(data.teamMapping);
     notifyTeamMappingUpdated();
     await load({ preserveSaveBanner: true });
     saveOk.value =

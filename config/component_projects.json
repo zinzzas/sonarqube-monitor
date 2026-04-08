@@ -2,7 +2,7 @@
   {
     "id": "api-server",
     "label": "API (Java)",
-    "componentKey": "2320-all",
+    "componentKey": "3214-all",
     "stack": "java",
     "severityFloor": "MEDIUM"
   },

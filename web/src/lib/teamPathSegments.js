@@ -10,6 +10,13 @@ import {
 
 const TEAM_MATCH_MAX_DEPTH = 32;
 
+const TEAM_MATCH_PROFILE_KEYS = [
+  "stripPrefixes",
+  "anchorAfter",
+  "chartStackAnchorAfter",
+  "maxDepth",
+];
+
 function norm(s) {
   return String(s || "")
     .replace(/\\/g, "/")
@@ -116,6 +123,45 @@ export function splitAfterPathSegments(component, profile) {
   return parts.slice(0, 32);
 }
 
+function teamMatchBlock(profile) {
+  const tm = profile?.teamMatch;
+  if (!tm || typeof tm !== "object" || Array.isArray(tm)) return null;
+  return Object.keys(tm).length ? tm : null;
+}
+
+function pathPassesTeamMatchGate(fullPath, teamMatch) {
+  const needle = String(teamMatch.pathMustContain ?? "").trim();
+  if (!needle) return true;
+  return norm(fullPath).toLowerCase().includes(needle.toLowerCase());
+}
+
+function profileEffectiveForTeamPathTree(profile) {
+  const tm = teamMatchBlock(profile);
+  if (!tm) return profile;
+  const out = { ...profile };
+  for (const k of TEAM_MATCH_PROFILE_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(tm, k)) {
+      out[k] = tm[k];
+    }
+  }
+  return out;
+}
+
+function pathTreeTeamSegments(component, projectId) {
+  const profile = profileForProject(projectId);
+  const tm = teamMatchBlock(profile);
+  if (tm) {
+    const fullPath = sonarRelativePath(component);
+    if (!fullPath || !pathPassesTeamMatchGate(fullPath, tm)) return [];
+  }
+  const eff = profileEffectiveForTeamPathTree(profile);
+  const segs = pathTreeSegments(component, eff);
+  if (segs.length) return segs;
+  const anchor = norm(eff.anchorAfter ?? "");
+  if (anchor) return [];
+  return stripOnlyPathSegments(component, eff, TEAM_MATCH_MAX_DEPTH);
+}
+
 /**
  * @param {string} component
  * @param {string} projectId
@@ -125,11 +171,7 @@ export function pathSegmentsForTeamMatch(component, projectId) {
   const profile = profileForProject(projectId);
   const strategy = String(profile?.strategy ?? "split_after");
   if (strategy === "path_tree") {
-    const segs = pathTreeSegments(component, profile);
-    if (segs.length) return segs;
-    const anchor = norm(profile.anchorAfter ?? "");
-    if (anchor) return [];
-    return stripOnlyPathSegments(component, profile, TEAM_MATCH_MAX_DEPTH);
+    return pathTreeTeamSegments(component, projectId);
   }
   if (strategy === "split_after") {
     const mod = extractModuleFromComponent(component, projectId);

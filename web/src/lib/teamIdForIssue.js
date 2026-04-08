@@ -5,6 +5,12 @@ import segmentLabels from "../../../config/module_segment_labels.json";
 import { issueComponentKey } from "../module.js";
 import { pathSegmentsForTeamMatch } from "./teamPathSegments.js";
 
+/** 서버 `team_mapping_config()` 와 맞추기 위해 하이드레이션 시 교체. 없으면 번들 JSON. */
+let runtimeTeamMapping = null;
+
+/** @type {Promise<void> | null} */
+let hydratePromise = null;
+
 function normSeg(s) {
   return String(s || "")
     .trim()
@@ -63,9 +69,44 @@ export function matchWhenForTeam(segments, when) {
   return matchLegacyWhen(segL, when);
 }
 
+export function setRuntimeTeamMapping(tm) {
+  runtimeTeamMapping = tm && typeof tm === "object" ? tm : null;
+}
+
 function teamMappingConfig() {
+  if (runtimeTeamMapping) {
+    return runtimeTeamMapping;
+  }
   const tm = segmentLabels.teamMapping;
   return tm && typeof tm === "object" ? tm : {};
+}
+
+/** `GET /api/config/team-mapping` — 대시보드·스냅샷과 동일 규칙으로 이슈 목록 팀 필터 정합 */
+export async function hydrateRuntimeTeamMappingFromServer() {
+  try {
+    const res = await fetch("/api/config/team-mapping", { cache: "no-store" });
+    if (!res.ok) return;
+    const data = await res.json().catch(() => ({}));
+    if (data.teamMapping && typeof data.teamMapping === "object") {
+      setRuntimeTeamMapping(data.teamMapping);
+    }
+  } catch {
+    /* 오프라인·번들 폴백 */
+  }
+}
+
+/** App 진입·팀 매핑 저장 알림 시 호출 — 진행 중인 요청을 덮어쓴다. */
+export function scheduleTeamMappingHydrate() {
+  hydratePromise = hydrateRuntimeTeamMappingFromServer();
+  return hydratePromise;
+}
+
+/** 이슈 목록 첫 조회 전에 대기 — 팀 딥링크 시 클라이언트 필터가 서버와 어긋나 빈 목록이 되지 않게 함 */
+export function ensureTeamMappingHydrated() {
+  if (!hydratePromise) {
+    hydratePromise = hydrateRuntimeTeamMappingFromServer();
+  }
+  return hydratePromise;
 }
 
 /** Python team_id_for_path_segments */

@@ -37,7 +37,7 @@
         "label": "공통",
         "when": {
           "modules": [
-            "common"
+            "com"
           ],
           "match": "any"
         }
@@ -47,7 +47,7 @@
       "teamId": "shared",
       "label": "ETC"
     },
-    "_note": "HIGH RISK(BLOCKER+HIGH)만 팀 버킷 집계. 첫 매칭만 적용. path_tree 에서 anchor(/fims/ 등)가 경로에 없으면 strip 이후 전체 경로 토큰으로도 매칭(깊이 제한 완화)."
+    "_note": "HIGH RISK(BLOCKER+HIGH)만 팀 버킷 집계. 첫 매칭만 적용. path_tree: module_grouping.profiles.<id>.teamMatch.pathMustContain 이 있으면 해당 부분 문자열이 Sonar 상대 경로에 없을 때 팀 세그먼트 없음→ETC. teamMatch.maxDepth·stripPrefixes·anchorAfter 는 팀 매칭 전용 오버라이드. 앵커만 있는 레거시(java /fims/)는 앵커 미매칭 시 strip 폴백 없음."
   },
   "maps": {
     "java_tree": {

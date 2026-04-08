@@ -14,6 +14,60 @@ from app.core.module_path_tree import path_tree_segments, sonar_relative_path, s
 # 팀 매칭 fallback 시 경로 깊이(anchor 미매칭·split_after unknown 등) — 프로필 maxDepth(예: 2)보다 넓게 토큰 검사
 _TEAM_MATCH_MAX_DEPTH = 32
 
+# `profiles.<id>.teamMatch` 에서 팀 전용으로 덮어쓸 수 있는 키 (module_grouping.json)
+_TEAM_MATCH_PROFILE_KEYS = frozenset(
+    {"stripPrefixes", "anchorAfter", "chartStackAnchorAfter", "maxDepth"}
+)
+
+
+def _norm_path_substring(s: str) -> str:
+    return str(s or "").replace("\\", "/").strip()
+
+
+def _team_match_block(profile: dict[str, Any]) -> dict[str, Any] | None:
+    tm = profile.get("teamMatch")
+    return tm if isinstance(tm, dict) and tm else None
+
+
+def _path_passes_team_match_gate(full_path: str, team_match: dict[str, Any]) -> bool:
+    """pathMustContain 이 비어 있지 않으면 Sonar 상대 경로에 부분 문자열(대소문자 무시)이 있어야 팀 토큰 추출."""
+    needle = str(team_match.get("pathMustContain") or "").strip()
+    if not needle:
+        return True
+    h = _norm_path_substring(full_path).lower()
+    return needle.lower() in h
+
+
+def _profile_effective_for_team_path_tree(profile: dict[str, Any]) -> dict[str, Any]:
+    """teamMatch 가 strip/anchor/maxDepth 를 주면 팀 매칭 path_tree 전처리에만 반영."""
+    tm = _team_match_block(profile)
+    if not tm:
+        return profile
+    out = dict(profile)
+    for k in _TEAM_MATCH_PROFILE_KEYS:
+        if k in tm:
+            out[k] = tm[k]
+    return out
+
+
+def _path_tree_team_segments(component: str | None, project_id: str | None) -> list[str]:
+    profile = profile_for_project(project_id)
+    tm = _team_match_block(profile)
+    if tm:
+        path_full = sonar_relative_path(component)
+        if not path_full or not _path_passes_team_match_gate(path_full, tm):
+            return []
+    eff = _profile_effective_for_team_path_tree(profile)
+    segs = path_tree_segments(component, eff)
+    if segs:
+        return segs
+    anchor = str(eff.get("anchorAfter") or "").strip()
+    if anchor:
+        return []
+    return strip_only_path_segments(
+        component, eff, max_depth_override=_TEAM_MATCH_MAX_DEPTH
+    )
+
 
 def _norm_seg(s: str) -> str:
     return str(s or "").strip().lower()
@@ -33,8 +87,9 @@ def _path_segments_for_issue(component: str | None, project_id: str | None) -> l
     path_tree / split_after 모두 지원. 모듈 exclude 와 무관하게 경로만 사용.
 
     **path_tree**
-    - `anchorAfter` 가 비어 있지 않으면: `path_tree_segments`만 사용(= strip 후 **첫** anchor 이후 경로만).
-      앵커가 없으면 빈 리스트 — strip 전체만으로는 팀 토큰을 만들지 않음(Java 패키지 com 등 오매칭 방지).
+    - `teamMatch` 가 있으면: `pathMustContain` 이 있을 때 Sonar 상대 경로에 없으면 빈 리스트.
+      `teamMatch.stripPrefixes` / `anchorAfter` / `maxDepth` 등은 팀 매칭용으로만 프로필을 덮어씀.
+    - 그 외: `anchorAfter` 가 비어 있지 않으면 path_tree_segments 만 사용; 앵커 미매칭 시 빈 리스트.
     - `anchorAfter` 가 비어 있으면(vue_src_tree 등): 위가 비면 strip_only 폴백.
 
     **split_after**
@@ -45,15 +100,7 @@ def _path_segments_for_issue(component: str | None, project_id: str | None) -> l
     profile = profile_for_project(project_id)
     strategy = str(profile.get("strategy") or "split_after")
     if strategy == "path_tree":
-        segs = path_tree_segments(component, profile)
-        if segs:
-            return segs
-        anchor = str(profile.get("anchorAfter") or "").strip()
-        if anchor:
-            return []
-        return strip_only_path_segments(
-            component, profile, max_depth_override=_TEAM_MATCH_MAX_DEPTH
-        )
+        return _path_tree_team_segments(component, project_id)
     if strategy == "split_after":
         mod = extract_module(component, project_id, profile=profile)
         if mod and mod != "unknown":

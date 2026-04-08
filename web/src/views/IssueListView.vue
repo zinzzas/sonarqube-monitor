@@ -113,7 +113,12 @@ function componentLabel(row) {
 
 /** Sonar API 이슈의 project, 없으면 component 키의 `프로젝트키:경로` 앞부분 */
 function issueProjectKey(row) {
-  if (row.project) return String(row.project).trim();
+  const p = row?.project;
+  if (typeof p === "string" && p.trim()) return p.trim();
+  if (p && typeof p === "object") {
+    const k = p.key ?? p.projectKey;
+    if (typeof k === "string" && k.trim()) return k.trim();
+  }
   const path = issueComponentKey(row);
   if (path.includes(":")) return path.split(":")[0].trim();
   return "";

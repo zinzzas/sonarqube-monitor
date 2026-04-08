@@ -1,5 +1,7 @@
 import { nextTick, unref, watch } from "vue";
 
+import { ensureTeamMappingHydrated } from "../lib/teamIdForIssue.js";
+
 /**
  * 이슈 목록 Sonar API 재조회 트리거만 담당.
  *
@@ -40,7 +42,9 @@ export function useIssueListApiTrigger({
       const ck = String(componentKeys.value || "").trim();
       if (!pid || !ck) return;
       const next = ++seq;
-      nextTick(() => {
+      nextTick(async () => {
+        if (next !== seq) return;
+        await ensureTeamMappingHydrated();
         if (next !== seq) return;
         onLoadFirst();
       });
