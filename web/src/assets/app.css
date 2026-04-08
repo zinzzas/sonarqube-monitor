@@ -885,8 +885,10 @@ code {
   justify-content: center;
   padding: 1.5rem;
   pointer-events: none;
-  background: rgba(15, 23, 42, 0.18);
-  backdrop-filter: blur(3px);
+  /* 가운데 로딩 시 배경이 과하게 가려지지 않도록 딤·블러 완화 */
+  background: rgba(15, 23, 42, 0.07);
+  -webkit-backdrop-filter: blur(1.5px);
+  backdrop-filter: blur(1.5px);
 }
 
 .load-more-overlay__content {
@@ -2277,8 +2279,9 @@ code {
   align-items: center;
   justify-content: center;
   padding: 1.5rem;
-  background: rgba(15, 23, 42, 0.38);
-  backdrop-filter: blur(4px);
+  background: rgba(15, 23, 42, 0.12);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
 }
 
 .dashboard-cache-overlay__card {
