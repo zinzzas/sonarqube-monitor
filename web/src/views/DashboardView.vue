@@ -407,6 +407,10 @@ const showTeamHrTeamDisclaimer = computed(() => {
   return Object.values(byTeam).some((n) => Number(n) > 0);
 });
 
+function teamHrCount(tid) {
+  return displayHighRiskByTeam.value[tid] ?? 0;
+}
+
 /** ALL 제외·componentKey 있는 프로젝트만 이슈 목록 딥링크 */
 const canDeepLinkToIssues = computed(() => {
   if (isAllScope.value) return false;
@@ -935,9 +939,12 @@ async function downloadModuleCsv() {
               :key="tid"
               type="button"
               class="kpi__team-chip"
-              :class="{ 'kpi__team-chip--muted': !canDeepLinkToIssues }"
+              :class="{
+                'kpi__team-chip--muted': !canDeepLinkToIssues,
+                'kpi__team-chip--zero': teamHrCount(tid) === 0,
+              }"
               :disabled="!canDeepLinkToIssues"
-              :style="{ color: teamHrColors[tid] }"
+              :style="teamHrCount(tid) > 0 ? { color: teamHrColors[tid] } : undefined"
               :title="
                 canDeepLinkToIssues
                   ? '이슈 목록으로 이동 (OPEN · BLOCKER·HIGH · 팀 필터)'
@@ -946,9 +953,9 @@ async function downloadModuleCsv() {
               @click="goIssuesTeam(tid)"
             >
               <span class="kpi__team-name">{{ highRiskTeamLabels[tid] ?? tid }}</span>
-              <strong class="kpi__team-num">{{
-                (displayHighRiskByTeam[tid] ?? 0).toLocaleString("ko-KR")
-              }}</strong>
+              <span class="kpi__team-num">{{
+                teamHrCount(tid).toLocaleString("ko-KR")
+              }}</span>
             </button>
           </div>
           <p v-if="showTeamHrTeamDisclaimer" class="team-hr-disclaimer" role="note">
