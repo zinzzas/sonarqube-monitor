@@ -1,11 +1,12 @@
 /**
  * SonarQube issues/search 무한 스크롤
  *
- * 최초: ps = pageSize + 1 로 한 건 더 받아 hasMore 판별.
- * len > pageSize 이면 화면에는 pageSize만큼만 두고 나머지 1건은 overflow로 보관 후
- * 다음 페이지(p=2…) 요청 시 앞에 붙여 순서 유지.
+ * 모든 요청에서 동일한 `ps = pageSize`로 맞춘다. Sonar는 `(p-1)*ps`로 오프셋을 잡으므로,
+ * 첫 페이지만 `ps = pageSize+1`로 두고 이후 페이지는 `ps = pageSize`로 두면 2페이지가
+ * 첫 페이지 마지막 이슈와 겹치고, 예전에 쓰던 overflow 병합 시 중복·건수 불일치가 난다.
  *
- * hasMore: total 이 있으면 loaded < total, 없으면 (첫 응답 len > pageSize) 또는 이후 배치 len === pageSize
+ * hasMore: `paging.total`이 있으면 loaded < total, 없으면 마지막 배치 길이가 pageSize 이상이면
+ * 더 있을 수 있음(다음 페이지로 확인).
  */
 import { computed, nextTick, onUnmounted, ref, unref, watch } from "vue";
 
@@ -102,8 +103,6 @@ export function useSonarIssuesPaging(refs) {
   const items = ref([]);
   /** SonarQube `total`; 응답에 없으면 null → hasMore 는 배치 길이 휴리스틱 */
   const total = ref(null);
-  /** 첫 응답에서 잘라낸 1건 — 다음 API 페이지와 이어 붙임 */
-  const overflowIssue = ref(null);
   /** 다음에 요청할 SonarQube 페이지 번호 (1-based) */
   const nextPage = ref(2);
   const hasMore = ref(false);
@@ -145,11 +144,10 @@ export function useSonarIssuesPaging(refs) {
     loadingMore.value = false;
     error.value = null;
     items.value = [];
-    overflowIssue.value = null;
     nextPage.value = 2;
     hasMore.value = false;
 
-    const ps = unref(pageSize) + 1;
+    const ps = unref(pageSize);
     const q = buildSonarIssuesSearchParams({
       ...commonArgs(),
       pageIndex: 1,
@@ -162,18 +160,12 @@ export function useSonarIssuesPaging(refs) {
       const data = await fetchIssues(q, "loadFirst");
       total.value = extractTotal(data);
       const list = extractIssuesList(data);
-      const n = unref(pageSize);
 
       if (list.length === 0) {
         hasMore.value = total.value != null && total.value > 0;
         needFollowUpPages = hasMore.value;
-      } else if (list.length > n) {
-        items.value = list.slice(0, n);
-        overflowIssue.value = list[n];
-        hasMore.value = true;
       } else {
         items.value = [...list];
-        overflowIssue.value = null;
         recomputeHasMore(list.length, total.value);
       }
     } catch (e) {
@@ -225,11 +217,7 @@ export function useSonarIssuesPaging(refs) {
       if (t != null) {
         total.value = t;
       }
-      let batch = extractIssuesList(data);
-      if (overflowIssue.value) {
-        batch = [overflowIssue.value, ...batch];
-        overflowIssue.value = null;
-      }
+      const batch = extractIssuesList(data);
       if (batch.length === 0) {
         const loaded = items.value.length;
         const serverTotal = total.value;
@@ -296,7 +284,6 @@ export function useSonarIssuesPaging(refs) {
     items,
     total,
     loadedCount,
-    overflowIssue,
     nextPage,
     hasMore,
     loading,
