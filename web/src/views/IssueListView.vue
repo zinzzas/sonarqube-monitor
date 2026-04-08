@@ -11,6 +11,7 @@ import {
   mergeIssueAuthorsIntoCache,
 } from "../lib/authorCache.js";
 import { issueMatchesTeamFilter } from "../lib/teamIdForIssue.js";
+import { teamLabelsFromSegmentLabels } from "../lib/teamMappingConfig.js";
 import { issueComponentKey, issueMatchesModuleFilter } from "../module.js";
 import {
   SEVERITY_OPTIONS,
@@ -316,6 +317,9 @@ const loadStateLabel = computed(() => {
   return "";
 });
 
+/** teamId → 표시 라벨(module_segment_labels teamMapping) */
+const teamIdToLabel = computed(() => teamLabelsFromSegmentLabels());
+
 const filterHint = computed(() => {
   const parts = [];
   const nav = route.query.nav;
@@ -332,7 +336,11 @@ const filterHint = computed(() => {
       parts.push(`Severity: ${sev}`);
     }
   }
-  if (teamFilter.value) parts.push(`팀(경로 매칭): ${teamFilter.value}`);
+  if (teamFilter.value) {
+    const tid = teamFilter.value;
+    const lbl = teamIdToLabel.value[tid] || tid;
+    parts.push(`팀(경로 매칭): ${lbl}`);
+  }
   if (filterAuthor.value) parts.push(`Author: ${filterAuthor.value}`);
   return parts.length ? parts.join(" · ") : "";
 });
