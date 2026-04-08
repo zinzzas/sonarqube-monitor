@@ -289,6 +289,25 @@ function dismissCacheInvalidateOverlay() {
   invalidateCacheErrorDetail.value = "";
 }
 
+/** 캐시 오버레이: 패널 안 단일 문구 영역만 전환 */
+const cacheOverlayPanelMessage = computed(() => {
+  const s = invalidateCacheState.value;
+  if (s === "running") return "캐시 비우는 중…";
+  if (s === "success") {
+    return "집계·스냅샷 캐시를 비웠습니다. 최신 데이터로 갱신되었습니다.";
+  }
+  if (s === "error") return invalidateCacheErrorDetail.value;
+  return "";
+});
+
+const cacheOverlayStatusClass = computed(() => {
+  const s = invalidateCacheState.value;
+  if (s === "success") return "load-more-overlay__status--success";
+  if (s === "error") return "load-more-overlay__status--err";
+  if (s === "running") return "load-more-overlay__status--running";
+  return "";
+});
+
 async function invalidateServerCache() {
   clearInvalidateCacheSuccessTimer();
   invalidateCacheErrorDetail.value = "";
@@ -1383,14 +1402,9 @@ async function downloadModuleCsv() {
           aria-live="polite"
           :aria-busy="loading || invalidateCacheState === 'running'"
         >
-          <div
-            class="load-more-overlay__content"
-            :class="{ 'load-more-overlay__content--stack': invalidateCacheState !== 'idle' }"
-          >
-            <div
-              v-if="loading || invalidateCacheState === 'running'"
-              class="load-more-overlay__logo"
-            >
+          <!-- 일반 집계 로딩: 스크림 위 칩만 (이슈 목록과 동일) -->
+          <div v-if="loading && invalidateCacheState === 'idle'" class="load-more-overlay__content">
+            <div class="load-more-overlay__logo">
               <img
                 class="load-more-overlay__img"
                 :src="LOAD_MORE_CHEVRON_SRC"
@@ -1399,30 +1413,34 @@ async function downloadModuleCsv() {
                 fetchpriority="low"
               />
             </div>
-            <p
-              v-if="invalidateCacheState === 'running'"
-              class="load-more-overlay__caption"
-            >
-              캐시 비우는 중…
-            </p>
-            <p
-              v-else-if="invalidateCacheState === 'success'"
-              class="load-more-overlay__caption load-more-overlay__caption--success"
-            >
-              집계·스냅샷 캐시를 비웠습니다. 최신 데이터로 갱신되었습니다.
-            </p>
-            <template v-else-if="invalidateCacheState === 'error'">
-              <p class="load-more-overlay__caption load-more-overlay__caption--err">
-                {{ invalidateCacheErrorDetail }}
+          </div>
+          <!-- 캐시 초기화: 흰 패널 안에서 로고(진행 중만) + 동일 문단 텍스트만 스위칭 -->
+          <div v-else class="load-more-overlay__content load-more-overlay__content--panel">
+            <div class="load-more-overlay__panel">
+              <div
+                v-if="loading || invalidateCacheState === 'running'"
+                class="load-more-overlay__logo load-more-overlay__logo--nested"
+              >
+                <img
+                  class="load-more-overlay__img"
+                  :src="LOAD_MORE_CHEVRON_SRC"
+                  alt=""
+                  decoding="async"
+                  fetchpriority="low"
+                />
+              </div>
+              <p class="load-more-overlay__status" :class="cacheOverlayStatusClass">
+                {{ cacheOverlayPanelMessage }}
               </p>
               <button
+                v-if="invalidateCacheState === 'error'"
                 type="button"
                 class="btn btn--dashboard-refresh load-more-overlay__action"
                 @click="dismissCacheInvalidateOverlay"
               >
                 확인
               </button>
-            </template>
+            </div>
           </div>
         </div>
       </Transition>
