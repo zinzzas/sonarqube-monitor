@@ -39,6 +39,10 @@ const router = useRouter();
 const loading = ref(true);
 /** 톱니 메뉴(`<details>`) — 캐시 초기화 후 닫기 */
 const gearMenuRef = ref(null);
+/** 캐시 초기화: idle | running | success | error — 얼럿 대신 레이어 */
+const invalidateCacheState = ref("idle");
+const invalidateCacheErrorDetail = ref("");
+let invalidateCacheSuccessTimer = 0;
 /** Module×Severity — 이슈 펼침 CSV 생성 중 */
 const exportingModuleCsv = ref(false);
 const err = ref("");
@@ -272,7 +276,24 @@ function closeGearMenu() {
   if (el && "open" in el) el.open = false;
 }
 
+function clearInvalidateCacheSuccessTimer() {
+  if (invalidateCacheSuccessTimer) {
+    window.clearTimeout(invalidateCacheSuccessTimer);
+    invalidateCacheSuccessTimer = 0;
+  }
+}
+
+function dismissCacheInvalidateOverlay() {
+  clearInvalidateCacheSuccessTimer();
+  invalidateCacheState.value = "idle";
+  invalidateCacheErrorDetail.value = "";
+}
+
 async function invalidateServerCache() {
+  clearInvalidateCacheSuccessTimer();
+  invalidateCacheErrorDetail.value = "";
+  invalidateCacheState.value = "running";
+  closeGearMenu();
   try {
     const headers = { "Content-Type": "application/json" };
     const t = sessionStorage.getItem("adminTeamMappingToken");
@@ -293,13 +314,18 @@ async function invalidateServerCache() {
       }
       throw new Error(msg);
     }
-    closeGearMenu();
-    window.alert(
-      "집계·스냅샷 캐시를 비웠습니다. 곧 최신 Sonar 기준으로 다시 불러옵니다.",
-    );
     await load();
+    invalidateCacheState.value = "success";
+    clearInvalidateCacheSuccessTimer();
+    invalidateCacheSuccessTimer = window.setTimeout(() => {
+      invalidateCacheSuccessTimer = 0;
+      if (invalidateCacheState.value === "success") {
+        invalidateCacheState.value = "idle";
+      }
+    }, 2600);
   } catch (e) {
-    window.alert(String(e?.message || e));
+    invalidateCacheErrorDetail.value = String(e?.message || e);
+    invalidateCacheState.value = "error";
   }
 }
 
@@ -514,6 +540,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener(TEAM_MAPPING_UPDATED_EVENT, onTeamMappingConfigUpdated);
+  clearInvalidateCacheSuccessTimer();
 });
 
 const chartStackLabels = computed(() => {
@@ -873,13 +900,29 @@ async function downloadModuleCsv() {
         </p>
       </div>
       <div class="dashboard__toolbar-right dashboard__toolbar-right--with-gear">
-        <details ref="gearMenuRef" class="dashboard-gear-menu">
+        <details
+          ref="gearMenuRef"
+          class="dashboard-gear-menu"
+          :class="{ 'dashboard-gear-menu--busy': invalidateCacheState === 'running' }"
+        >
           <summary
             class="dashboard-toolbar-gear"
-            title="관리 메뉴"
-            aria-label="관리 메뉴 열기"
+            :class="{ 'dashboard-toolbar-gear--busy': invalidateCacheState === 'running' }"
+            :title="
+              invalidateCacheState === 'running' ? '데이터 캐시 초기화 중' : '관리 메뉴'
+            "
+            :aria-label="
+              invalidateCacheState === 'running' ? '데이터 캐시 초기화 중' : '관리 메뉴 열기'
+            "
+            :aria-busy="invalidateCacheState === 'running'"
           >
+            <span
+              v-if="invalidateCacheState === 'running'"
+              class="dashboard-toolbar-gear__busy-label"
+              >데이터 캐시 초기화 중…</span
+            >
             <img
+              v-else
               :src="dashboardGearIcon"
               alt=""
               width="22"
@@ -900,7 +943,7 @@ async function downloadModuleCsv() {
               type="button"
               class="dashboard-gear-menu__item dashboard-gear-menu__item--btn"
               role="menuitem"
-              :disabled="loading"
+              :disabled="loading || invalidateCacheState === 'running'"
               @click="invalidateServerCache"
             >
               집계·스냅샷 캐시 초기화
@@ -1339,7 +1382,7 @@ async function downloadModuleCsv() {
     <Teleport to="body">
       <Transition name="load-more-fade">
         <div
-          v-if="loading"
+          v-if="loading && invalidateCacheState !== 'running'"
           class="load-more-overlay"
           role="status"
           aria-live="polite"
@@ -1355,6 +1398,41 @@ async function downloadModuleCsv() {
                 fetchpriority="low"
               />
             </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <Teleport to="body">
+      <Transition name="load-more-fade">
+        <div
+          v-if="invalidateCacheState !== 'idle'"
+          class="dashboard-cache-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="dashboard-cache-overlay-title"
+        >
+          <div class="dashboard-cache-overlay__card">
+            <h2 id="dashboard-cache-overlay-title" class="dashboard-cache-overlay__title">
+              <template v-if="invalidateCacheState === 'running'">데이터 캐시 초기화 중…</template>
+              <template v-else-if="invalidateCacheState === 'success'">캐시를 비웠습니다</template>
+              <template v-else>캐시 초기화 실패</template>
+            </h2>
+            <p v-if="invalidateCacheState === 'running'" class="dashboard-cache-overlay__lead">
+              집계·스냅샷을 비우고 최신 Sonar 기준으로 다시 불러옵니다.
+            </p>
+            <p v-else-if="invalidateCacheState === 'success'" class="dashboard-cache-overlay__lead">
+              집계·스냅샷 캐시를 비웠습니다. 화면이 최신 데이터로 갱신되었습니다.
+            </p>
+            <p v-else class="dashboard-cache-overlay__err">{{ invalidateCacheErrorDetail }}</p>
+            <button
+              v-if="invalidateCacheState === 'error'"
+              type="button"
+              class="btn btn--dashboard-refresh dashboard-cache-overlay__btn"
+              @click="dismissCacheInvalidateOverlay"
+            >
+              확인
+            </button>
           </div>
         </div>
       </Transition>

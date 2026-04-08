@@ -2246,6 +2246,77 @@ code {
   object-fit: contain;
 }
 
+.dashboard-gear-menu--busy > summary {
+  pointer-events: none;
+  cursor: default;
+}
+
+.dashboard-toolbar-gear--busy {
+  width: auto;
+  min-height: 2.5rem;
+  height: auto;
+  padding: 0.35rem 0.75rem;
+  max-width: min(100%, 18rem);
+}
+
+.dashboard-toolbar-gear__busy-label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--dashboard-emerald-hover);
+  line-height: 1.35;
+  text-align: center;
+}
+
+/* 캐시 초기화 — 얼럿 대신 전역 레이어 */
+.dashboard-cache-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 210;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(15, 23, 42, 0.38);
+  backdrop-filter: blur(4px);
+}
+
+.dashboard-cache-overlay__card {
+  width: 100%;
+  max-width: 22rem;
+  padding: 1.25rem 1.35rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(5, 150, 105, 0.28);
+  background: var(--card-bg, #fff);
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.15);
+}
+
+.dashboard-cache-overlay__title {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text, #0f172a);
+}
+
+.dashboard-cache-overlay__lead {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--text-muted, #64748b);
+  line-height: 1.5;
+}
+
+.dashboard-cache-overlay__err {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #b91c1c;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.dashboard-cache-overlay__btn {
+  margin-top: 1rem;
+}
+
 /* ----- Admin: teamMapping ----- */
 .admin-team-mapping .crumb {
   margin-bottom: 1rem;
