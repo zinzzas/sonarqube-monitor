@@ -1875,17 +1875,34 @@ code {
 }
 
 .team-hr-disclaimer {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
   margin: 0.5rem 0 0;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
-  font-size: 0.72rem;
-  font-weight: 500;
-  line-height: 1.5;
+  font-size: 0.76rem;
+  line-height: 1.45;
   letter-spacing: -0.015em;
-  color: var(--text-muted);
   word-break: keep-all;
   overflow-wrap: break-word;
+}
+
+.team-hr-disclaimer__icon {
+  flex-shrink: 0;
+  line-height: 1;
+  font-size: 1.12em;
+  /* 이모지는 글리프 기준선이 어긋나는 경우가 많아 소폭 보정 */
+  transform: translateY(0.08em);
+}
+
+.team-hr-disclaimer strong {
+  flex: 1;
+  min-width: 0;
+  font-weight: 700;
+  color: var(--text, #0f172a);
+  line-height: 1.45;
 }
 
 .team-hr-disclaimer--chart {

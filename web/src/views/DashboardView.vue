@@ -56,10 +56,6 @@ const expandedModulePaths = ref(new Set());
 /** `/api/metrics/dashboard`는 프로젝트당 Sonar 순차 호출·이슈 페이징으로 수분 걸릴 수 있음. */
 const DASHBOARD_FETCH_TIMEOUT_MS = 600_000;
 
-/** KPI·팀별 High risk 카드 — Path 기준 팀 매핑 편차 안내 */
-const TEAM_HR_DISCLAIMER =
-  "💡 팀별 매칭 건수는 Path 기준 맵핑 처리되므로 편차가 발생할 수 있습니다.";
-
 const SEV_COLORS = {
   BLOCKER: "#b91c1c",
   HIGH: "#ea580c",
@@ -1069,7 +1065,8 @@ async function downloadModuleCsv() {
             </button>
           </div>
           <p v-if="showTeamHrTeamDisclaimer" class="team-hr-disclaimer" role="note">
-            {{ TEAM_HR_DISCLAIMER }}
+            <span class="team-hr-disclaimer__icon" aria-hidden="true">❗</span>
+            <strong>미분류 : 팀 미매칭 대상으로 전 개발팀 확인 필수</strong>
           </p>
         </div>
         <div class="kpi kpi--mini">
@@ -1171,7 +1168,8 @@ async function downloadModuleCsv() {
             class="team-hr-disclaimer team-hr-disclaimer--chart"
             role="note"
           >
-            {{ TEAM_HR_DISCLAIMER }}
+            <span class="team-hr-disclaimer__icon" aria-hidden="true">❗</span>
+            <strong>미분류 : 팀 미매칭 대상으로 전 개발팀 확인 필수</strong>
           </p>
         </div>
       </div>
