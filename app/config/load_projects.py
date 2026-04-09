@@ -1,9 +1,10 @@
 """프로젝트 목록 — `config/component_projects.json` 단일 출처.
 
-각 행: id, label, componentKey(Sonar), 선택 필드 stack(java|vue) — 운영자가 스택 구분용으로만 사용.
+각 행: id, label, componentKey(Sonar), 선택 필드 stack(java|vue) — 모듈 프로필 보조(아래 참고).
 선택 필드 severityFloor: BLOCKER | HIGH | MEDIUM | LOW | INFO — 해당 레벨 이상만 집계·이슈 목록에 반영
 (미지정 시 단일 프로젝트 집계는 INFO=전체, projectId=all 병합은 MEDIUM=기존 B·H·M과 동일).
-모듈 집계 규칙은 `config/module_grouping.json` 의 projectProfiles[id] 가 단일 출처다.
+모듈 집계 프로필은 `module_grouping.json` 의 `projectProfiles[id]` 가 최우선이고, 해당 id 가 없으면
+같은 id 의 `stack` 이 java → java_tree, vue → vue_src_tree 로 보조 선택된다.
 """
 from __future__ import annotations
 

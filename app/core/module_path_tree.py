@@ -9,6 +9,16 @@ def _norm_slash(s: str) -> str:
     return s.replace("\\", "/").strip()
 
 
+def _anchor_for_path_match(anchor: str) -> str:
+    """
+    strip 이후 `rest` 는 선행 슬래시가 없다. 앵커를 `/com/hhi/` 처럼 쓰면 매칭이 실패하므로 제거한다.
+    """
+    a = _norm_slash(anchor)
+    while a.startswith("/"):
+        a = a[1:]
+    return a
+
+
 def sonar_relative_path(component: str | None) -> str:
     """
     Sonar 이슈 `component`는 보통 `projectKey:relative/path` 형태다.
@@ -73,7 +83,7 @@ def rollup_path_after_anchor(component: str | None, profile: dict[str, Any]) -> 
     if not path:
         return ""
     rest = _strip_prefixes_path(path, profile)
-    anchor = _norm_slash(str(profile.get("anchorAfter") or ""))
+    anchor = _anchor_for_path_match(str(profile.get("anchorAfter") or ""))
     if anchor:
         m = re.search(re.escape(anchor), rest, re.IGNORECASE)
         if not m:
@@ -89,9 +99,9 @@ def chart_rest_after_anchor(component: str | None, profile: dict[str, Any]) -> s
         return ""
     rest = _strip_prefixes_path(path, profile)
     if "chartStackAnchorAfter" in profile:
-        anchor = _norm_slash(str(profile.get("chartStackAnchorAfter") or ""))
+        anchor = _anchor_for_path_match(str(profile.get("chartStackAnchorAfter") or ""))
     else:
-        anchor = _norm_slash(str(profile.get("anchorAfter") or ""))
+        anchor = _anchor_for_path_match(str(profile.get("anchorAfter") or ""))
     if anchor:
         m = re.search(re.escape(anchor), rest, re.IGNORECASE)
         if not m:

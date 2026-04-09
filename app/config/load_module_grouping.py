@@ -1,6 +1,7 @@
 """`config/module_grouping.json` — 프로젝트별 모듈 경로 추출 프로필.
 
 `projectProfiles`의 키는 `config/component_projects.json`의 각 행 `id`와 동일해야 한다.
+행에만 있고 `projectProfiles`에 없으면 `stack`(java|vue)으로 프로필을 보조한다.
 """
 from __future__ import annotations
 

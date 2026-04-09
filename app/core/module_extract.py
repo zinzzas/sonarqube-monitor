@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.config.load_module_grouping import load_module_grouping
+from app.config.load_projects import load_component_projects
 from app.config.load_module_segment_labels import exclude_rules_for_profile
 from app.core.module_path_tree import (
     chart_stack_bucket as _chart_stack_bucket_path,
@@ -68,6 +69,26 @@ def is_excluded_from_module_rollup(component: str | None, project_id: str | None
     return _match_excludes(rest, cfg)
 
 
+def _profile_id_from_stack_field(project_id: str | None) -> str | None:
+    """
+    `component_projects.json` 의 `stack`(java|vue) — `projectProfiles` 에 id 가 없을 때만 보조.
+    명시적 `projectProfiles` 매핑이 항상 우선한다.
+    """
+    if not project_id:
+        return None
+    want = str(project_id).strip()
+    for row in load_component_projects():
+        if str(row.get("id") or "").strip() != want:
+            continue
+        s = str(row.get("stack") or "").strip().lower()
+        if s == "java":
+            return "java_tree"
+        if s == "vue":
+            return "vue_src_tree"
+        return None
+    return None
+
+
 def _profile_for_project(project_id: str | None) -> dict:
     cfg = load_module_grouping()
     profiles = cfg.get("profiles") or {}
@@ -76,7 +97,7 @@ def _profile_for_project(project_id: str | None) -> dict:
     if project_id and str(project_id) in pmap:
         pid = str(pmap[str(project_id)])
     else:
-        pid = default_id
+        pid = _profile_id_from_stack_field(project_id) or default_id
     return profiles.get(pid) or profiles.get(default_id) or {}
 
 
@@ -91,7 +112,8 @@ def profile_id_for_project(project_id: str | None) -> str:
     pmap = cfg.get("projectProfiles") or {}
     if project_id and str(project_id) in pmap:
         return str(pmap[str(project_id)])
-    return default_id
+    alt = _profile_id_from_stack_field(project_id)
+    return alt if alt else default_id
 
 
 def module_strategy_for_project(project_id: str | None) -> str:
