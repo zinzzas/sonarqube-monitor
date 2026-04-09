@@ -6,6 +6,7 @@ from app.services.issue_snapshot_query import (
     strip_internal_query_params,
     try_issue_search_from_snapshot,
 )
+from app.services.module_issue_exclude import filter_normalized_proxy_issues_page
 from app.services.sonar_api import collect_issues_search_params, proxy_issues_search
 
 router = APIRouter(tags=["issues"])
@@ -70,5 +71,6 @@ async def issues_search(request: Request) -> dict:
     upstream = strip_internal_query_params(params)
     raw = await proxy_issues_search(upstream)
     if isinstance(raw, dict):
-        return _normalize_sonar_issues_search(raw)
+        out = _normalize_sonar_issues_search(raw)
+        return filter_normalized_proxy_issues_page(out, upstream)
     return raw

@@ -23,7 +23,7 @@
         "src/main/java"
       ],
       "anchorAfter": "",
-      "chartStackAnchorAfter": "",
+      "chartStackAnchorAfter": "com/hhi/hihr/",
       "maxDepth": 7,
       "teamMatch": {
         "pathMustContain": "/net/cj/",

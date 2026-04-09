@@ -3,6 +3,7 @@ Sonar `issues/search` 와 동일한 쿼리스트링을 스냅샷(`issues_full.js
 
 - `component_projects.json` 의 단일 componentKey 와 매칭될 때만 사용.
 - `teamId` 가 있으면 `team_id_for_issue_row`(웹 `teamIdForIssue` 와 동일) 로 필터 후 정렬·페이징.
+- 심각도·상태·작성자 필터 직후 `maps.<profile>.exclude`(pathSegmentAny 등) 로 대시보드와 동일 제외.
 - 스냅샷이 없거나 TTL 만료·`severityFloor` 불일치(설정 변경)·미지원 정렬이면 None → Sonar 프록시.
 """
 from __future__ import annotations
@@ -20,6 +21,7 @@ from app.core.severity import (
 )
 from app.core.team_high_risk import team_id_for_issue_row
 from app.services import issue_snapshot_store
+from app.services.module_issue_exclude import filter_issue_dicts_by_module_exclude
 
 
 def _pairs_last_wins(pairs: list[tuple[str, str]]) -> dict[str, str]:
@@ -201,6 +203,7 @@ def try_issue_search_from_snapshot(
         statuses_param=d.get("statuses") or d.get("issueStatuses"),
         authors_param=d.get("authors"),
     )
+    filtered, _ = filter_issue_dicts_by_module_exclude(filtered, pid)
 
     team_tid = (d.get("teamId") or "").strip()
     if team_tid:

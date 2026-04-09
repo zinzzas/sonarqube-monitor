@@ -55,12 +55,15 @@
     "java_tree": {
       "treeEnabled": true,
       "exclude": {
-        "_note": "샘플은 예시이며 필요 없으면 배열 비우기. path_tree: /fims/ 앵커 이후 경로 기준",
+        "_note": "path_tree: strip·anchor 이후 rollup 기준. pathSegmentAny: 디렉터리 세그먼트(파일명 제외) 중 하나가 값과 같으면 제외. pathContains: 전체 문자열 부분일치",
         "pathPrefixes": [
           "generated"
         ],
         "pathContains": [
           "/mock/"
+        ],
+        "pathSegmentAny": [
+          "dashboard"
         ],
         "firstSegments": [],
         "fileSuffixes": [
@@ -91,7 +94,7 @@
       "treeEnabled": false,
       "_note": "src/ 제거 후 첫 세그먼트가 views·components·api 등 다양함. api만 두면 views/... 경로는 unknown. 접두 스킵 매칭(moduleSegmentLabels)으로 views/foo/api/common → api/common 도 라벨 가능",
       "exclude": {
-        "_note": "샘플은 예시이며 필요 없으면 배열 비우기. src/ strip 후 첫 세그먼트 기준(앵커 없음)",
+        "_note": "src/ strip 후 상대 경로. pathSegmentAny 는 디렉터리 세그먼트(파일명 제외) 정확 일치",
         "pathPrefixes": [
           "assets"
         ],
@@ -99,6 +102,7 @@
           "__mocks__",
           "Dockerfile"
         ],
+        "pathSegmentAny": [],
         "firstSegments": [
           "public"
         ],

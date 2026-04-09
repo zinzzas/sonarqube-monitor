@@ -7,6 +7,7 @@ from app.config.load_module_grouping import load_module_grouping
 from app.config.load_projects import load_component_projects
 from app.config.load_module_segment_labels import exclude_rules_for_profile
 from app.core.module_path_tree import (
+    _looks_like_file,
     chart_stack_bucket as _chart_stack_bucket_path,
     path_tree_cumulative_keys,
     path_tree_leaf_key,
@@ -17,6 +18,17 @@ from app.core.module_path_tree import (
 
 def _norm_slash(s: str) -> str:
     return s.replace("\\", "/").strip()
+
+
+def _directory_segments_for_exclude(rest: str) -> list[str]:
+    """
+    exclude 판정용 디렉터리 세그먼트만(파일명으로 보이는 마지막 토큰은 반복 제거).
+    `pathSegmentAny` 는 이 목록의 **정확히 일치**(대소문자 무시)로만 매칭한다.
+    """
+    parts = [x for x in _norm_slash(rest).split("/") if x]
+    while parts and _looks_like_file(parts[-1]):
+        parts = parts[:-1]
+    return parts
 
 
 def _match_excludes(rest: str, cfg: dict[str, Any]) -> bool:
@@ -32,6 +44,15 @@ def _match_excludes(rest: str, cfg: dict[str, Any]) -> bool:
         s = str(sub).lower()
         if s and s in rest_l:
             return True
+    seg_needles = {
+        str(x).strip().lower()
+        for x in (cfg.get("pathSegmentAny") or [])
+        if str(x).strip()
+    }
+    if seg_needles:
+        for seg in _directory_segments_for_exclude(rest):
+            if seg.lower() in seg_needles:
+                return True
     parts = [x for x in rest_l.split("/") if x]
     seg0 = parts[0] if parts else ""
     for seg in cfg.get("firstSegments") or []:

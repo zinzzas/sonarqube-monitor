@@ -61,7 +61,7 @@ def replace_team_mapping_stored(team_mapping: dict[str, Any]) -> None:
 
 
 def exclude_rules_for_profile(profile_id: str) -> dict[str, Any]:
-    """`maps.<profileId>.exclude` — 없으면 빈 dict."""
+    """`maps.<profileId>.exclude` — pathPrefixes·pathContains·pathSegmentAny·… 없으면 빈 dict."""
     data = load_module_segment_labels()
     maps = data.get("maps") or {}
     row = maps.get(profile_id) or {}
