@@ -45,10 +45,10 @@ def _match_excludes(rest: str, cfg: dict[str, Any]) -> bool:
 
 def is_excluded_from_module_rollup(component: str | None, project_id: str | None) -> bool:
     """
-    모듈 롤업·스택 차트에서 제외할 경로인지.
+    `module_segment_labels.maps.<profile>.exclude` 에 해당하면 대시보드 집계 전반에서 제외한다.
     path_tree: anchorAfter 이후 경로(rollup_path_after_anchor) 기준.
     split_after: Sonar 상대 경로 전체(프로젝트키: 제외) 기준.
-    Severity 합계에는 여전히 포함(미노출은 모듈/차트 축만).
+    KPI(severity·highRisk)·모듈·차트·팀 HR·내보내기와 동일 기준.
     """
     cfg = exclude_rules_for_profile(profile_id_for_project(project_id))
     if not cfg:

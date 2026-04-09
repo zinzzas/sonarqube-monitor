@@ -239,6 +239,20 @@ class TeamHighRiskSegmentsTests(unittest.TestCase):
             )
         self.assertEqual(counts.get("team_a", 0), 1, counts)
 
+    def test_excluded_high_risk_not_counted_in_team_buckets(self) -> None:
+        """exclude 경로의 BLOCKER/HIGH 는 팀 버킷에 넣지 않음(집계·KPI와 동일)."""
+        comp = "proj:src/main/java/com/x/fims/portal/domain/Foo.java"
+        issues = [{"component": comp, "severity": "BLOCKER"}]
+        with patch("app.core.team_high_risk.profile_for_project", return_value=_java_tree_profile()):
+            with patch("app.core.team_high_risk.is_excluded_from_module_rollup", return_value=True):
+                counts = aggregate_high_risk_by_team(
+                    issues,
+                    "api-server",
+                    severity_key_fn=severity_bucket_for_issue,
+                    is_high_risk_fn=lambda s: s in ("BLOCKER", "HIGH"),
+                )
+        self.assertEqual(sum(counts.values()), 0, counts)
+
 
 if __name__ == "__main__":
     unittest.main()

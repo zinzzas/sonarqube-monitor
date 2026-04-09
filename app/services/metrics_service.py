@@ -26,6 +26,7 @@ from app.core.config import settings
 from app.core.module_extract import (
     chart_stack_bucket,
     extract_path_keys_for_rollup,
+    is_excluded_from_module_rollup,
     module_bucket_display_key,
     module_strategy_for_project,
     profile_id_for_project,
@@ -111,6 +112,8 @@ def _aggregate_issues(
     chart_stack: dict[str, dict[str, int]] = {}
     for issue in issues:
         comp = issue_component_key(issue)
+        if is_excluded_from_module_rollup(comp, project_id):
+            continue
         sev = severity_bucket_for_issue(issue)
         severity_total[sev] = severity_total.get(sev, 0) + 1
         for mod in extract_path_keys_for_rollup(comp, project_id):
@@ -162,7 +165,7 @@ def _sort_key_flat(r: dict[str, Any]) -> tuple:
 
 async def export_flat_issues_json() -> dict[str, Any]:
     """
-    프로젝트별 Module×Severity 집계와 동일 소스(OPEN 전량)를 이슈 단위로 펼친 목록.
+    프로젝트별 집계와 동일 기준: OPEN 이슈 중 `maps.<profile>.exclude` 가 아닌 건만 이슈 단위로 펼친 목록.
     프로젝트마다 Sonar 호출을 순차 처리(병렬 호출 없음). 캐시가 있으면 재사용.
     """
     labels_map = project_labels_map()
@@ -184,6 +187,9 @@ async def export_flat_issues_json() -> dict[str, Any]:
         issues = entry[2]
         label = labels_map.get(pid) or str(row.get("label") or pid)
         for issue in issues:
+            comp = issue_component_key(issue)
+            if is_excluded_from_module_rollup(comp, pid):
+                continue
             rows.append(_issue_export_dict(issue, pid, label))
     rows.sort(key=_sort_key_flat)
     return {

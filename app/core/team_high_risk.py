@@ -8,9 +8,10 @@ HIGH RISK(BLOCKER+HIGH) 이슈를 `module_segment_labels.json` 의 `teamMapping`
 
 **분류 기준(요약)**
 1. 심각도: 표준 버킷이 BLOCKER 또는 HIGH 인 이슈만 집계 대상(`is_high_risk_fn`).
-2. 경로: Sonar `component`(또는 `mainComponent.key`) 문자열에서 `module_grouping.json` 의
+2. `module_segment_labels.maps.<profile>.exclude` 에 해당하는 경로는 팀 집계에서 제외(KPI·모듈과 동일).
+3. 경로: Sonar `component`(또는 `mainComponent.key`) 문자열에서 `module_grouping.json` 의
    해당 `projectId` 프로필(`path_tree` / `split_after`)에 따라 **디렉터리 토큰 목록** `segments` 를 만든다.
-3. 팀: `teamMapping.precedence` 를 **위에서부터** 순회하며, `when`(modules + match first/any) 이
+4. 팀: `teamMapping.precedence` 를 **위에서부터** 순회하며, `when`(modules + match first/any) 이
    `segments` 와 처음으로 맞는 행의 `teamId` 가 버킷이다. 아무 것도 안 맞으면 `fallback`(예: shared=ETC).
 
 **디버그**
@@ -28,6 +29,7 @@ from app.config.load_module_segment_labels import team_mapping_config
 from app.core.config import settings
 from app.core.module_extract import (
     extract_module,
+    is_excluded_from_module_rollup,
     profile_for_project,
     profile_id_for_project,
     split_after_path_segments,
@@ -315,7 +317,7 @@ def aggregate_high_risk_by_team(
     - `is_high_risk_fn(sev)`: 보통 `lambda s: s in ("BLOCKER", "HIGH")`.
 
     **동작**
-    1. 위 조건을 통과한 이슈만 대상.
+    1. BLOCKER/HIGH 이고 `maps.<profile>.exclude` 에 걸리지 않은 이슈만 대상(집계·KPI와 동일 기준).
     2. `issue_component_key` 로 Sonar 경로 문자열 확보 (`mainComponent.key` 폴백 포함).
     3. `path_segments_for_team_match` → `module_grouping` 프로필에 따라 슬래시 토큰 배열 생성.
     4. `team_id_for_path_segments` → `module_segment_labels.teamMapping` 의 precedence 첫 매칭 팀,
@@ -347,6 +349,22 @@ def aggregate_high_risk_by_team(
         if not is_high_risk_fn(sev):
             continue
         comp = issue_component_key(issue)
+        if is_excluded_from_module_rollup(comp, project_id):
+            _append_team_match_debug_line(
+                {
+                    "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                    "projectId": project_id,
+                    "moduleProfileId": prof_id,
+                    "issueKey": str(issue.get("key") or issue.get("issueKey") or ""),
+                    "component": comp,
+                    "severity": sev,
+                    "segments": [],
+                    "teamId": None,
+                    "teamLabel": None,
+                    "excluded": True,
+                }
+            )
+            continue
         segs = path_segments_for_team_match(comp, project_id)
         tid = team_id_for_path_segments(segs, mapping)
         counts[tid] = counts.get(tid, 0) + 1
