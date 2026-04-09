@@ -67,6 +67,14 @@ class Settings(BaseSettings):
     프로젝트별 하위 폴더 — 롤아웃 1단계: `metrics_service` 캐시 미스 시 디스크 조회·갱신.
     """
 
+    team_match_debug_log: str = ""
+    """
+    비우면 비활성. 설정 시 `aggregate_high_risk_by_team` 가 BLOCKER/HIGH 이슈마다
+    팀 매칭 결과를 JSON Lines 로 한 줄씩 append (UTF-8).
+    상대 경로면 프로젝트 루트 기준 — 예: `data/logs/team_match.jsonl`.
+    환경 변수: `TEAM_MATCH_DEBUG_LOG`.
+    """
+
     issues_search_from_snapshot: bool = True
     """
     True: `GET /api/issues/search` 는 스냅샷이 있으면 Sonar 대신 로컬 필터·페이징.

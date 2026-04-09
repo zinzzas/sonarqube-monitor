@@ -1,15 +1,41 @@
-"""HIGH RISK(BLOCKER+HIGH) 이슈를 `module_segment_labels.json` 의 teamMapping 으로 버킷."""
+"""
+HIGH RISK(BLOCKER+HIGH) 이슈를 `module_segment_labels.json` 의 `teamMapping` 으로 팀 버킷에 나눈다.
+
+**대시보드와의 연결**
+- `metrics_service._build_by_project_row` 가 Sonar에서 모은 OPEN 이슈 목록에 대해
+  `aggregate_high_risk_by_team` 을 호출하고, 반환값이 API 응답 `highRiskByTeam` 이 된다.
+- UI의 “개발1팀 / 개발2팀 / … / ETC(미분류)” 건수는 모두 이 모듈의 규칙으로만 결정된다.
+
+**분류 기준(요약)**
+1. 심각도: 표준 버킷이 BLOCKER 또는 HIGH 인 이슈만 집계 대상(`is_high_risk_fn`).
+2. 경로: Sonar `component`(또는 `mainComponent.key`) 문자열에서 `module_grouping.json` 의
+   해당 `projectId` 프로필(`path_tree` / `split_after`)에 따라 **디렉터리 토큰 목록** `segments` 를 만든다.
+3. 팀: `teamMapping.precedence` 를 **위에서부터** 순회하며, `when`(modules + match first/any) 이
+   `segments` 와 처음으로 맞는 행의 `teamId` 가 버킷이다. 아무 것도 안 맞으면 `fallback`(예: shared=ETC).
+
+**디버그**
+- `Settings.team_match_debug_log` 에 파일 경로를 주면 BLOCKER/HIGH 이슈마다 JSON 한 줄씩 기록한다.
+"""
 from __future__ import annotations
 
+import json
+import threading
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Literal
 
 from app.config.load_module_segment_labels import team_mapping_config
+from app.core.config import settings
 from app.core.module_extract import (
     extract_module,
     profile_for_project,
+    profile_id_for_project,
     split_after_path_segments,
 )
 from app.core.module_path_tree import path_tree_segments, sonar_relative_path, strip_only_path_segments
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_TEAM_MATCH_DEBUG_LOCK = threading.Lock()
 
 # 팀 매칭 fallback 시 경로 깊이(anchor 미매칭·split_after unknown 등) — 프로필 maxDepth(예: 2)보다 넓게 토큰 검사
 _TEAM_MATCH_MAX_DEPTH = 32
@@ -18,6 +44,27 @@ _TEAM_MATCH_MAX_DEPTH = 32
 _TEAM_MATCH_PROFILE_KEYS = frozenset(
     {"stripPrefixes", "anchorAfter", "chartStackAnchorAfter", "maxDepth"}
 )
+
+
+def _append_team_match_debug_line(record: dict[str, Any]) -> None:
+    """`settings.team_match_debug_log` 가 설정된 경우에만 JSON Lines append (프로세스 내 단일 락)."""
+    raw = (settings.team_match_debug_log or "").strip()
+    if not raw:
+        return
+    path = Path(raw)
+    if not path.is_absolute():
+        path = _REPO_ROOT / path
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return
+    line = json.dumps(record, ensure_ascii=False) + "\n"
+    try:
+        with _TEAM_MATCH_DEBUG_LOCK:
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(line)
+    except OSError:
+        return
 
 
 def _norm_path_substring(s: str) -> str:
@@ -259,11 +306,27 @@ def aggregate_high_risk_by_team(
     is_high_risk_fn: Any,
 ) -> dict[str, int]:
     """
-    BLOCKER/HIGH 이슈만 카운트, 이슈당 1버킷.
-    severity_key_fn: 이슈 dict -> BLOCKER|HIGH|... (표준 버킷)
-    is_high_risk_fn: severity str -> bool
+    대시보드 **High risk(BLOCKER+HIGH) 팀별 건수** (`highRiskByTeam`) 의 유일한 계산 함수.
+
+    **입력**
+    - `issues`: 해당 Sonar component(프로젝트)의 OPEN 이슈 목록(집계·스냅샷과 동일 소스).
+    - `severity_key_fn(issue)`: 이슈 dict → 표준 심각도 버킷(`BLOCKER`, `HIGH`, …).
+      `metrics_service` 는 `severity_bucket_for_issue` 를 넘긴다.
+    - `is_high_risk_fn(sev)`: 보통 `lambda s: s in ("BLOCKER", "HIGH")`.
+
+    **동작**
+    1. 위 조건을 통과한 이슈만 대상.
+    2. `issue_component_key` 로 Sonar 경로 문자열 확보 (`mainComponent.key` 폴백 포함).
+    3. `path_segments_for_team_match` → `module_grouping` 프로필에 따라 슬래시 토큰 배열 생성.
+    4. `team_id_for_path_segments` → `module_segment_labels.teamMapping` 의 precedence 첫 매칭 팀,
+       없으면 fallback(예: shared = UI의 ETC/미분류).
+
+    **디버그 로그** (`settings.team_match_debug_log` 비어 있지 않을 때)
+    - 위 HIGH RISK 이슈마다 JSON 한 줄: component, segments, teamId, moduleProfileId 등.
+    - 패키지 구조가 다른 프로젝트에서 팀 오분류 시 원인 분석용.
     """
     mapping = team_mapping_config()
+    team_labels = team_labels_from_config(mapping)
     prec = mapping.get("precedence") or []
     team_ids: list[str] = []
     if isinstance(prec, list):
@@ -277,14 +340,29 @@ def aggregate_high_risk_by_team(
         team_ids.append("shared")
 
     counts: dict[str, int] = {tid: 0 for tid in dict.fromkeys(team_ids)}
+    prof_id = profile_id_for_project(project_id)
 
     for issue in issues:
         sev = severity_key_fn(issue)
         if not is_high_risk_fn(sev):
             continue
-        segs = path_segments_for_team_match(issue_component_key(issue), project_id)
+        comp = issue_component_key(issue)
+        segs = path_segments_for_team_match(comp, project_id)
         tid = team_id_for_path_segments(segs, mapping)
         counts[tid] = counts.get(tid, 0) + 1
+        _append_team_match_debug_line(
+            {
+                "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "projectId": project_id,
+                "moduleProfileId": prof_id,
+                "issueKey": str(issue.get("key") or issue.get("issueKey") or ""),
+                "component": comp,
+                "severity": sev,
+                "segments": segs,
+                "teamId": tid,
+                "teamLabel": team_labels.get(tid, tid),
+            }
+        )
 
     return counts
 

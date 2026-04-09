@@ -214,6 +214,7 @@ def _build_by_project_row(
     ck = str(row.get("componentKey") or "")
     st, mods, cstack = _aggregate_issues(issues, pid)
     total = sum(st.values())
+    # High risk 팀별 건수: `app.core.team_high_risk.aggregate_high_risk_by_team` — teamMapping·경로 세그먼트 단일 출처
     hr_by_team = aggregate_high_risk_by_team(
         issues,
         pid,

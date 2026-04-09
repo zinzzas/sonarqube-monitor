@@ -7,17 +7,8 @@
         "label": "개발1팀",
         "when": {
           "modules": [
-            "atm"
-          ],
-          "match": "any"
-        }
-      },
-      {
-        "teamId": "team_b",
-        "label": "개발2팀",
-        "when": {
-          "modules": [
-            "shrbatch"
+            "atm",
+            "dashboard"
           ],
           "match": "any"
         }
@@ -27,7 +18,8 @@
         "label": "개발3팀",
         "when": {
           "modules": [
-            "common"
+            "common",
+            "person"
           ],
           "match": "any"
         }
@@ -38,6 +30,16 @@
         "when": {
           "modules": [
             "com"
+          ],
+          "match": "any"
+        }
+      },
+      {
+        "teamId": "team_b",
+        "label": "개발2팀",
+        "when": {
+          "modules": [
+            "shrbatch"
           ],
           "match": "any"
         }
