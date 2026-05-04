@@ -56,7 +56,7 @@ class IssueSnapshotQueryTests(unittest.TestCase):
             ("p", "1"),
             ("ps", "50"),
             ("statuses", "OPEN"),
-            ("s", "FILE_LINE"),
+            ("s", "UNKNOWN_SORT_XYZ"),
             ("asc", "false"),
         ]
         self.assertIsNone(try_issue_search_from_snapshot(pairs))
@@ -181,3 +181,57 @@ class IssueSnapshotQueryTests(unittest.TestCase):
                 out = try_issue_search_from_snapshot(pairs, now=time.time())
         assert out is not None
         self.assertEqual([i["key"] for i in out["issues"]], ["hi", "low"])
+
+    def test_file_line_sort_asc(self) -> None:
+        issues = [
+            {"key": "z", "status": "OPEN", "severity": "MINOR", "component": "ck:src/Z.java", "line": 1},
+            {"key": "a2", "status": "OPEN", "severity": "MINOR", "component": "ck:src/A.java", "line": 20},
+            {"key": "a1", "status": "OPEN", "severity": "MINOR", "component": "ck:src/A.java", "line": 5},
+        ]
+        row = {"id": "p", "componentKey": "ck"}
+        pairs = [
+            ("componentKeys", "ck"),
+            ("p", "1"),
+            ("ps", "50"),
+            ("statuses", "OPEN"),
+            ("s", "FILE_LINE"),
+            ("asc", "true"),
+        ]
+        with patch(
+            "app.services.issue_snapshot_query.project_row_by_component_key",
+            return_value=row,
+        ):
+            with patch(
+                "app.services.issue_snapshot_query.issue_snapshot_store.load_issues_if_fresh",
+                return_value=issues,
+            ):
+                out = try_issue_search_from_snapshot(pairs, now=time.time())
+        assert out is not None
+        self.assertEqual([i["key"] for i in out["issues"]], ["a1", "a2", "z"])
+
+    def test_file_line_sort_desc(self) -> None:
+        issues = [
+            {"key": "z", "status": "OPEN", "severity": "MINOR", "component": "ck:src/Z.java", "line": 1},
+            {"key": "a2", "status": "OPEN", "severity": "MINOR", "component": "ck:src/A.java", "line": 20},
+            {"key": "a1", "status": "OPEN", "severity": "MINOR", "component": "ck:src/A.java", "line": 5},
+        ]
+        row = {"id": "p", "componentKey": "ck"}
+        pairs = [
+            ("componentKeys", "ck"),
+            ("p", "1"),
+            ("ps", "50"),
+            ("statuses", "OPEN"),
+            ("s", "FILE_LINE"),
+            ("asc", "false"),
+        ]
+        with patch(
+            "app.services.issue_snapshot_query.project_row_by_component_key",
+            return_value=row,
+        ):
+            with patch(
+                "app.services.issue_snapshot_query.issue_snapshot_store.load_issues_if_fresh",
+                return_value=issues,
+            ):
+                out = try_issue_search_from_snapshot(pairs, now=time.time())
+        assert out is not None
+        self.assertEqual([i["key"] for i in out["issues"]], ["z", "a2", "a1"])

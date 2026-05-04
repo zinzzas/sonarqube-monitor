@@ -4,7 +4,7 @@ Sonar `issues/search` 와 동일한 쿼리스트링을 스냅샷(`issues_full.js
 - `component_projects.json` 의 단일 componentKey 와 매칭될 때만 사용.
 - `teamId` 가 있으면 `team_id_for_issue_row`(웹 `teamIdForIssue` 와 동일) 로 필터 후 정렬·페이징.
 - 심각도·상태·작성자 필터 직후 `maps.<profile>.exclude`(pathSegmentAny 등) 로 대시보드와 동일 제외.
-- 스냅샷이 없거나 TTL 만료·`severityFloor` 불일치(설정 변경)·미지원 정렬이면 None → Sonar 프록시.
+- 스냅샷이 없거나 TTL 만료·`severityFloor` 불일치(설정 변경)·미지원 정렬(`s` 가 SEVERITY·CREATION_DATE·FILE_LINE 외)이면 None → Sonar 프록시.
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from app.core.severity import (
     severity_bucket_for_issue,
     severity_rank_for_sort,
 )
-from app.core.team_high_risk import team_id_for_issue_row
+from app.core.team_high_risk import issue_component_key, team_id_for_issue_row
 from app.services import issue_snapshot_store
 from app.services.module_issue_exclude import filter_issue_dicts_by_module_exclude
 
@@ -59,6 +59,23 @@ def _creation_sort_key(issue: dict[str, Any]) -> str:
 def _issue_key_sort(issue: dict[str, Any]) -> str:
     k = issue.get("key") or issue.get("issueKey") or ""
     return str(k)
+
+
+def _line_sort_key(issue: dict[str, Any]) -> int:
+    """Sonar `FILE_LINE` 보조 키 — 동일 파일 내 라인 순."""
+    ln = issue.get("line")
+    if isinstance(ln, int):
+        return ln
+    if isinstance(ln, str) and ln.strip().isdigit():
+        return int(ln.strip())
+    tr = issue.get("textRange")
+    if isinstance(tr, dict):
+        start = tr.get("startLine")
+        if isinstance(start, int):
+            return start
+        if isinstance(start, str) and start.strip().isdigit():
+            return int(start.strip())
+    return 0
 
 
 def _allowed_severity_standards(severities_param: str | None) -> set[str] | None:
@@ -129,7 +146,7 @@ def _sort_issues(
     sort_field: str | None,
     asc: bool | None,
 ) -> list[dict[str, Any]]:
-    """sort_field: SEVERITY | CREATION_DATE; asc None 은 false 와 동일(Sonar 기본 desc)."""
+    """sort_field: SEVERITY | CREATION_DATE | FILE_LINE; asc None 은 false 와 동일(Sonar 기본 desc)."""
     sf = (sort_field or "").strip().upper()
     ascending = asc is True
     keyed: list[tuple[Any, ...] | dict[str, Any]] = []
@@ -144,6 +161,12 @@ def _sort_issues(
             keyed.append((_creation_sort_key(i), _issue_key_sort(i), i))
         keyed.sort(key=lambda t: (t[0], t[1]), reverse=not ascending)
         return [t[2] for t in keyed]  # type: ignore[misc]
+    if sf == "FILE_LINE":
+        for i in issues:
+            comp = issue_component_key(i)
+            keyed.append((comp, _line_sort_key(i), _issue_key_sort(i), i))
+        keyed.sort(key=lambda t: (t[0], t[1], t[2]), reverse=not ascending)
+        return [t[3] for t in keyed]  # type: ignore[misc]
     return issues
 
 
@@ -191,7 +214,7 @@ def try_issue_search_from_snapshot(
         # Sonar 기본 정렬과 1:1 보장 불가 → 프록시
         return None
     sfu = sort_field.strip().upper()
-    if sfu not in ("SEVERITY", "CREATION_DATE"):
+    if sfu not in ("SEVERITY", "CREATION_DATE", "FILE_LINE"):
         return None
 
     asc_raw = _parse_bool(d.get("asc"))

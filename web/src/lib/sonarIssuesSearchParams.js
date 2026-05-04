@@ -32,7 +32,7 @@ function shouldOmitSeveritiesParam(filterSeverities, severityFloor) {
  * @param {number} args.ps
  * @param {string[]} args.filterSeverities
  * @param {string[]} args.filterStatuses
- * @param {string} args.sortBySeverity '' | severity_desc | …
+ * @param {string} args.sortBySeverity '' | severity_desc | component_asc | …
  * @param {(s: string[]) => string} args.severitiesToApiParam
  * @param {string} [args.authorFilter] Sonar `authors` (SCM 로그인, 콤마 구분 복수 가능)
  * @param {string} [args.severityFloor] component_projects `severityFloor` — INFO면 기존 동작, 그 외는 하한 이상만 API 요청
@@ -102,6 +102,12 @@ export function buildSonarIssuesSearchParams(args) {
   } else if (sort === "creation_asc") {
     q.set("s", "CREATION_DATE");
     q.set("asc", "true");
+  } else if (sort === "component_asc") {
+    q.set("s", "FILE_LINE");
+    q.set("asc", "true");
+  } else if (sort === "component_desc") {
+    q.set("s", "FILE_LINE");
+    q.set("asc", "false");
   }
 
   return q;

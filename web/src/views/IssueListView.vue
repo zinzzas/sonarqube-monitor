@@ -101,6 +101,14 @@ const severitySortOptions = [
   { value: "severity_asc", label: "Severity · 낮음 우선 (INFO → BLOCKER)" },
   { value: "creation_desc", label: "생성일 · 최신순" },
   { value: "creation_asc", label: "생성일 · 오래된 순" },
+  {
+    value: "component_asc",
+    label: "Component · 경로 오름차순 (파일·컴포넌트 키, 라인 ↑)",
+  },
+  {
+    value: "component_desc",
+    label: "Component · 경로 내림차순 (파일·컴포넌트 키, 라인 ↓)",
+  },
   { value: "", label: "기본 (SonarQube 서버 기본)" },
 ];
 
